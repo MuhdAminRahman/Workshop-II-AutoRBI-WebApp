@@ -1,14 +1,34 @@
 """
-Extraction Rules - UPDATED WITH EXPECTED VALUES
-Equipment metadata from MLK IPETRO PLANT masterfile
-Includes component definitions, expected values, and field instructions
+Extraction Rules - STRONG VERSION
+Equipment metadata with expected values, field instructions, and insulation configs
+Based on MLK IPETRO PLANT masterfile
 """
 
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Set
 
 
 class ExtractionRules:
-    """Equipment definitions with components and expected values"""
+    """Equipment definitions with complete extraction guidance"""
+    
+    # Equipment that only need insulation extraction (V-001, H-001)
+    INSULATION_ONLY_EQUIPMENT: Set[str] = {'V-001', 'H-001'}
+    
+    # Equipment that skip operating pressure/temperature
+    SKIP_OPERATING_PRESSURE_TEMPERATURE: Set[str] = {'H-002', 'H-003', 'H-004'}
+    
+    # Insulation configuration per equipment
+    INSULATION_CONFIGS: Dict[str, Dict] = {
+        'V-001': {'field': 'INSULATION', 'expected_value': 'No'},
+        'H-001': {'field': 'INSULATION', 'expected_value': 'yes'},
+        'V-002': {'field': 'INSULATION', 'expected_value': 'No'},
+        'V-003': {'field': 'INSULATION', 'expected_value': 'No'},
+        'V-004': {'field': 'INSULATION', 'expected_value': 'yes'},
+        'V-005': {'field': 'INSULATION', 'expected_value': 'yes'},
+        'V-006': {'field': 'INSULATION', 'expected_value': 'No'},
+        'H-002': {'field': 'INSULATION', 'expected_value': 'No'},
+        'H-003': {'field': 'INSULATION', 'expected_value': 'yes'},
+        'H-004': {'field': 'INSULATION', 'expected_value': 'yes'},
+    }
     
     # Master equipment definitions with expected values for validation
     EQUIPMENT_MAP: Dict[str, Dict] = {
@@ -19,7 +39,6 @@ class ExtractionRules:
                 'Top Head': {
                     'phase': 'Gas',
                     'fluid': 'Air',
-                    'material_type': 'Carbon Steel',
                     'material_spec': 'SA-516',
                     'material_grade': '70',
                     'insulation': 'No',
@@ -31,7 +50,6 @@ class ExtractionRules:
                 'Shell': {
                     'phase': 'Gas',
                     'fluid': 'Air',
-                    'material_type': 'Carbon Steel',
                     'material_spec': 'SA-516',
                     'material_grade': '70',
                     'insulation': 'No',
@@ -43,7 +61,6 @@ class ExtractionRules:
                 'Bottom Head': {
                     'phase': 'Gas',
                     'fluid': 'Air',
-                    'material_type': 'Carbon Steel',
                     'material_spec': 'SA-516',
                     'material_grade': '70',
                     'insulation': 'No',
@@ -61,7 +78,6 @@ class ExtractionRules:
                 'Top Head': {
                     'phase': 'Liquid',
                     'fluid': 'CHILLED WATER',
-                    'material_type': 'Stainless Steel',
                     'material_spec': 'SA-240',
                     'material_grade': '316',
                     'insulation': 'No',
@@ -73,7 +89,6 @@ class ExtractionRules:
                 'Shell': {
                     'phase': 'Liquid',
                     'fluid': 'CHILLED WATER',
-                    'material_type': 'Stainless Steel',
                     'material_spec': 'SA-240',
                     'material_grade': '316',
                     'insulation': 'No',
@@ -85,7 +100,6 @@ class ExtractionRules:
                 'Bottom Head': {
                     'phase': 'Liquid',
                     'fluid': 'CHILLED WATER',
-                    'material_type': 'Stainless Steel',
                     'material_spec': 'SA-240',
                     'material_grade': '316',
                     'insulation': 'No',
@@ -103,7 +117,6 @@ class ExtractionRules:
                 'Top Head': {
                     'phase': 'Gas',
                     'fluid': 'CONDENSATE',
-                    'material_type': 'Carbon Steel',
                     'material_spec': 'SA-516',
                     'material_grade': '70',
                     'insulation': 'No',
@@ -115,7 +128,6 @@ class ExtractionRules:
                 'Shell': {
                     'phase': 'Gas',
                     'fluid': 'CONDENSATE',
-                    'material_type': 'Carbon Steel',
                     'material_spec': 'SA-516',
                     'material_grade': '70',
                     'insulation': 'No',
@@ -127,7 +139,6 @@ class ExtractionRules:
                 'Bottom Head': {
                     'phase': 'Gas',
                     'fluid': 'CONDENSATE',
-                    'material_type': 'Carbon Steel',
                     'material_spec': 'SA-516',
                     'material_grade': '70',
                     'insulation': 'No',
@@ -145,7 +156,6 @@ class ExtractionRules:
                 'Head': {
                     'phase': 'Liquid',
                     'fluid': 'HOT WATER',
-                    'material_type': 'Stainless Steel',
                     'material_spec': 'A-240',
                     'material_grade': '304',
                     'insulation': 'yes',
@@ -157,7 +167,6 @@ class ExtractionRules:
                 'Shell': {
                     'phase': 'Liquid',
                     'fluid': 'HOT WATER',
-                    'material_type': 'Stainless Steel',
                     'material_spec': 'A-240',
                     'material_grade': '304',
                     'insulation': 'yes',
@@ -175,7 +184,6 @@ class ExtractionRules:
                 'Top Channel': {
                     'phase': 'Liquid',
                     'fluid': 'WATER',
-                    'material_type': 'Stainless Steel',
                     'material_spec': 'SA-240',
                     'material_grade': '316',
                     'insulation': 'yes',
@@ -187,7 +195,6 @@ class ExtractionRules:
                 'Shell': {
                     'phase': 'Liquid',
                     'fluid': 'AIR GAS/SULPHUR OXIDE',
-                    'material_type': 'Stainless Steel',
                     'material_spec': 'SA-240',
                     'material_grade': '316',
                     'insulation': 'yes',
@@ -199,7 +206,6 @@ class ExtractionRules:
                 'Bottom Channel': {
                     'phase': 'Gas',
                     'fluid': 'WATER',
-                    'material_type': 'Stainless Steel',
                     'material_spec': 'SA-240',
                     'material_grade': '316',
                     'insulation': 'yes',
@@ -217,7 +223,6 @@ class ExtractionRules:
                 'Head': {
                     'phase': 'Gas',
                     'fluid': 'WATER & STEAM',
-                    'material_type': 'Carbon Steel',
                     'material_spec': 'SA-283',
                     'material_grade': 'C',
                     'insulation': 'No',
@@ -229,7 +234,6 @@ class ExtractionRules:
                 'Shell': {
                     'phase': 'Gas',
                     'fluid': 'WATER & STEAM',
-                    'material_type': 'Carbon Steel',
                     'material_spec': 'SA-283',
                     'material_grade': 'C',
                     'insulation': 'No',
@@ -247,7 +251,6 @@ class ExtractionRules:
                 'Channel': {
                     'phase': 'Gas',
                     'fluid': 'Vent Gas',
-                    'material_type': 'Stainless Steel',
                     'material_spec': 'SA-240',
                     'material_grade': '316',
                     'insulation': 'yes',
@@ -259,7 +262,6 @@ class ExtractionRules:
                 'Shell': {
                     'phase': 'Gas',
                     'fluid': 'Vent Gas',
-                    'material_type': 'Stainless Steel',
                     'material_spec': 'SA-240',
                     'material_grade': '316',
                     'insulation': 'yes',
@@ -271,7 +273,6 @@ class ExtractionRules:
                 'Tube Bundle': {
                     'phase': 'Gas',
                     'fluid': 'Vent Gas',
-                    'material_type': 'Stainless Steel',
                     'material_spec': 'SA-213',
                     'material_grade': 'TP316',
                     'insulation': 'yes',
@@ -289,7 +290,6 @@ class ExtractionRules:
                 'Channel': {
                     'phase': 'Liquid',
                     'fluid': 'CHILLED WATER',
-                    'material_type': 'Stainless Steel',
                     'material_spec': 'SA-403',
                     'material_grade': '316',
                     'insulation': 'No',
@@ -301,7 +301,6 @@ class ExtractionRules:
                 'Shell': {
                     'phase': 'Liquid',
                     'fluid': 'ALKALINE WATER',
-                    'material_type': 'Stainless Steel',
                     'material_spec': 'SA-312',
                     'material_grade': '316',
                     'insulation': 'No',
@@ -313,7 +312,6 @@ class ExtractionRules:
                 'Tube Bundle': {
                     'phase': 'Liquid',
                     'fluid': 'CHILLED WATER',
-                    'material_type': 'Stainless Steel',
                     'material_spec': 'SA-403',
                     'material_grade': '316',
                     'insulation': 'No',
@@ -331,7 +329,6 @@ class ExtractionRules:
                 'Channel': {
                     'phase': 'Liquid',
                     'fluid': 'CHILLED WATER',
-                    'material_type': 'Stainless Steel',
                     'material_spec': 'SA-403',
                     'material_grade': '316',
                     'insulation': 'yes',
@@ -343,7 +340,6 @@ class ExtractionRules:
                 'Shell': {
                     'phase': 'Liquid',
                     'fluid': 'REFLUX WATER',
-                    'material_type': 'Stainless Steel',
                     'material_spec': 'SA-312',
                     'material_grade': '316',
                     'insulation': 'yes',
@@ -355,7 +351,6 @@ class ExtractionRules:
                 'Tube Bundle': {
                     'phase': 'Liquid',
                     'fluid': 'CHILLED WATER',
-                    'material_type': 'Stainless Steel',
                     'material_spec': 'SA-403',
                     'material_grade': '316',
                     'insulation': 'yes',
@@ -373,7 +368,6 @@ class ExtractionRules:
                 'Channel': {
                     'phase': 'Liquid',
                     'fluid': 'CHILLED WATER',
-                    'material_type': 'Stainless Steel',
                     'material_spec': 'SA-240',
                     'material_grade': '316',
                     'insulation': 'yes',
@@ -385,7 +379,6 @@ class ExtractionRules:
                 'Shell': {
                     'phase': 'Liquid',
                     'fluid': 'REFLUX WATER',
-                    'material_type': 'Stainless Steel',
                     'material_spec': 'SA-240',
                     'material_grade': '316',
                     'insulation': 'yes',
@@ -397,7 +390,6 @@ class ExtractionRules:
                 'Tube Bundle': {
                     'phase': 'Liquid',
                     'fluid': 'CHILLED WATER',
-                    'material_type': 'Stainless Steel',
                     'material_spec': 'SA-240',
                     'material_grade': '316',
                     'insulation': 'yes',
@@ -412,39 +404,40 @@ class ExtractionRules:
     
     @classmethod
     def get_equipment(cls, equipment_number: str) -> Dict:
-        """Get equipment metadata by equipment number"""
+        """Get equipment metadata"""
         return cls.EQUIPMENT_MAP.get(equipment_number, {})
     
     @classmethod
     def get_components_for_equipment(cls, equipment_number: str) -> Dict[str, Dict]:
-        """Get components with expected values for equipment"""
+        """Get components with expected values"""
         eq = cls.get_equipment(equipment_number)
         return eq.get('components', {})
     
     @classmethod
     def get_pmt_number(cls, equipment_number: str) -> str:
-        """Get PMT number for equipment"""
+        """Get PMT number"""
         eq = cls.get_equipment(equipment_number)
         return eq.get('pmt_number', '')
     
     @classmethod
     def get_description(cls, equipment_number: str) -> str:
-        """Get equipment description"""
+        """Get description"""
         eq = cls.get_equipment(equipment_number)
         return eq.get('description', '')
     
     @classmethod
-    def validate_extracted_data(cls, equipment_number: str, component_name: str, extracted_data: Dict) -> Dict[str, bool]:
+    def validate_extracted_data(cls, equipment_number: str, component_name: str, extracted_data: Dict) -> tuple[int, List[str]]:
         """
         Validate extracted data against expected values.
         
         Returns:
-            Dict[field_name -> is_valid] for each field
+            (valid_field_count, missing_fields_list)
         """
         components = cls.get_components_for_equipment(equipment_number)
         expected = components.get(component_name, {})
         
-        validation_result = {}
+        missing_fields = []
+        valid_count = 0
         
         # Check each field
         for field in ['fluid', 'material_spec', 'material_grade', 'insulation', 
@@ -452,13 +445,54 @@ class ExtractionRules:
             expected_value = expected.get(field, '')
             extracted_value = extracted_data.get(field, '')
             
-            # Simple validation: does extracted match expected (case-insensitive for text)
-            if field in ['material_spec', 'material_grade', 'fluid']:
-                is_valid = extracted_value.upper() == expected_value.upper()
+            # Check if field is populated
+            if not extracted_value or extracted_value.strip() == '':
+                missing_fields.append(field)
             else:
-                # For numbers/pressures, check if extracted contains the expected number
-                is_valid = str(expected_value) in str(extracted_value)
-            
-            validation_result[field] = is_valid
+                # Basic validation: text fields case-insensitive
+                if field in ['material_spec', 'material_grade', 'fluid']:
+                    if str(expected_value).upper() in str(extracted_value).upper():
+                        valid_count += 1
+                else:
+                    # For numbers, accept if extracted contains expected
+                    if str(expected_value) in str(extracted_value):
+                        valid_count += 1
         
-        return validation_result
+        return valid_count, missing_fields
+    
+    @classmethod
+    def get_completeness_score(cls, equipment_number: str, extracted_data: Dict) -> tuple[float, Dict[str, List[str]]]:
+        """
+        Calculate overall completeness score.
+        
+        Returns:
+            (overall_completeness_percent, missing_fields_by_component)
+        """
+        expected_comps = cls.get_components_for_equipment(equipment_number)
+        
+        all_missing = {}
+        total_valid = 0
+        total_fields = 0
+        
+        for comp_name in expected_comps.keys():
+            # Find this component in extracted data
+            extracted_comp = None
+            for comp in extracted_data.get('components', []):
+                if comp.get('component_name') == comp_name:
+                    extracted_comp = comp
+                    break
+            
+            if not extracted_comp:
+                all_missing[comp_name] = ['fluid', 'material_spec', 'material_grade', 'insulation',
+                                         'design_temp', 'design_pressure', 'operating_temp', 'operating_pressure']
+                total_fields += 8
+            else:
+                valid, missing = cls.validate_extracted_data(equipment_number, comp_name, extracted_comp)
+                total_valid += valid
+                total_fields += 8
+                if missing:
+                    all_missing[comp_name] = missing
+        
+        completeness = (total_valid / total_fields * 100) if total_fields > 0 else 0
+        
+        return completeness, all_missing
