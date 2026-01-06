@@ -76,6 +76,7 @@ async def register(
         email=request.email,
         password=request.password,
         full_name=request.full_name,
+        role=request.role
     )
     
     # If registration failed, return error

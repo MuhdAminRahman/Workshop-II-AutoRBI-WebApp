@@ -199,13 +199,14 @@ async def status_check():
 # ============================================================================
 
 # Routes will be included here:
-from app.api import auth, works, extractions, reports #, analytics, websockets
+from app.api import auth, works, extractions, reports, history, analytics#, websockets
 #
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 app.include_router(works.router, prefix="/api/works", tags=["works"])
 app.include_router(extractions.router, prefix="/api", tags=["extractions"])
 app.include_router(reports.router, prefix="/api/reports", tags=["reports"])
-# app.include_router(analytics.router, prefix="/api/analytics", tags=["analytics"])
+app.include_router(history.router, prefix="/api/history", tags=["history"])
+app.include_router(analytics.router, prefix="/api/analytics", tags=["analytics"])
 # app.include_router(websockets.router, tags=["websockets"])
 
 
