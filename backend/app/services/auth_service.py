@@ -151,7 +151,8 @@ def register_user(
     username: str,
     email: str,
     password: str,
-    full_name: str
+    full_name: str,
+    role: Optional[str]
 ) -> tuple[Optional[User], Optional[str]]:
     """
     Register a new user.
@@ -198,7 +199,7 @@ def register_user(
         email=email,
         password_hash=hashed_password,
         full_name=full_name,
-        role=UserRole.ENGINEER,  # Default role
+        role=role,  # Default role
     )
     
     try:
