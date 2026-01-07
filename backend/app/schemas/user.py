@@ -27,6 +27,9 @@ class UserRegisterRequest(BaseModel):
     
     full_name: str = Field(..., min_length=2, max_length=100)
     """Full name (2-100 characters)"""
+
+    role: str=Field(..., min_length=2, max_length=100)
+    """User Role(Engineer,Admin)"""
     
     class Config:
         example = {

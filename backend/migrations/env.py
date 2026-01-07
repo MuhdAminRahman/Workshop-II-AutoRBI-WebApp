@@ -16,6 +16,7 @@ from app.models.equipment import Equipment
 from app.models.component import Component
 from app.models.extraction import Extraction
 from app.models.file import File
+from app.models.activity import Activity
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
