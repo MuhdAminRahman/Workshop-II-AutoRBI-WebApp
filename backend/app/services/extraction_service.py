@@ -15,6 +15,7 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 import anthropic
 import httpx
+from PIL import Image
 
 from app.models.extraction import Extraction, ExtractionStatus
 from app.models.equipment import Equipment
@@ -85,6 +86,123 @@ async def convert_pdf_to_images(pdf_url: str) -> List:
 # CLAUDE API EXTRACTION
 # ============================================================================
 
+def compress_image_bytes_for_api(image_bytes: bytes) -> bytes:
+    """
+    Compress PNG image bytes if they would exceed Claude's 5MB limit after base64 encoding.
+    Uses PNG-only compression methods following your exact approach.
+    Returns compressed image bytes.
+    """
+    MAX_SIZE_BYTES = 5 * 1024 * 1024  # 5MB
+    OPTIMAL_LONG_EDGE = 1568  # Anthropic's recommended max dimension
+    
+    try:
+        # Base64 encoding increases size by ~33%, so check if encoded size will exceed limit
+        # Use 3.75MB threshold (3.75 * 1.33 ≈ 5MB) - YOUR EXACT LOGIC
+        SAFE_SIZE_BEFORE_BASE64 = int(MAX_SIZE_BYTES * 0.75)  # 3.75MB
+        
+        # If under safe threshold, return original without modification
+        if len(image_bytes) <= SAFE_SIZE_BEFORE_BASE64:
+            size_mb = len(image_bytes) / (1024 * 1024)
+            logger.debug(f"  ✅ Original size {size_mb:.2f}MB - no compression needed")
+            return image_bytes
+        
+        # Image is too large, need to compress
+        logger.info(f"  ⚠️ Original size {len(image_bytes) / (1024 * 1024):.2f}MB exceeds 5MB - compressing PNG...")
+        
+        with Image.open(io.BytesIO(image_bytes)) as img:
+            original_mode = img.mode
+            
+            # Step 1: Try optimize + compress_level=9 on original size
+            buffer = io.BytesIO()
+            img.save(buffer, format='PNG', optimize=True, compress_level=9)
+            buffer.seek(0)
+            
+            # Check ACTUAL base64 size (not approximation)
+            compressed_data = buffer.getvalue()
+            base64_size = len(base64.b64encode(compressed_data))  # ACTUAL base64 size
+            
+            if base64_size <= MAX_SIZE_BYTES:
+                size_mb = base64_size / (1024 * 1024)
+                logger.info(f"  ✅ Compressed to {size_mb:.2f}MB base64 (PNG optimize + compress_level=9)")
+                return compressed_data
+            
+            # Step 2: Try resizing to optimal dimension
+            width, height = img.size
+            max_dimension = max(width, height)
+            
+            if max_dimension > OPTIMAL_LONG_EDGE:
+                scale_factor = OPTIMAL_LONG_EDGE / max_dimension
+                new_size = (int(width * scale_factor), int(height * scale_factor))
+                img_resized = img.resize(new_size, Image.Resampling.LANCZOS)
+                logger.info(f"  Resized from {width}x{height} to {new_size[0]}x{new_size[1]}")
+                
+                buffer = io.BytesIO()
+                img_resized.save(buffer, format='PNG', optimize=True, compress_level=9)
+                buffer.seek(0)
+                
+                # Check ACTUAL base64 size
+                compressed_data = buffer.getvalue()
+                base64_size = len(base64.b64encode(compressed_data))
+                
+                if base64_size <= MAX_SIZE_BYTES:
+                    size_mb = base64_size / (1024 * 1024)
+                    logger.info(f"  ✅ Compressed to {size_mb:.2f}MB base64 (PNG resized + optimized)")
+                    return compressed_data
+                
+                img = img_resized  # Use resized for next steps
+            
+            # Step 3: Try color quantization (24-bit → 8-bit, 256 colors)
+            # This is still PNG, just with fewer colors
+            logger.info(f"  Applying color quantization (256 colors)...")
+            if img.mode != 'P':  # Only quantize if not already palettized
+                # Convert to RGB first if RGBA - YOUR EXACT LOGIC
+                if img.mode == 'RGBA':
+                    background = Image.new('RGB', img.size, (255, 255, 255))
+                    background.paste(img, mask=img.split()[-1])
+                    img = background
+                
+                img_quantized = img.quantize(colors=256)
+            else:
+                img_quantized = img
+            
+            buffer = io.BytesIO()
+            img_quantized.save(buffer, format='PNG', optimize=True, compress_level=9)
+            buffer.seek(0)
+            
+            # Check ACTUAL base64 size
+            compressed_data = buffer.getvalue()
+            base64_size = len(base64.b64encode(compressed_data))
+            
+            if base64_size <= MAX_SIZE_BYTES:
+                size_mb = base64_size / (1024 * 1024)
+                logger.info(f"  ✅ Compressed to {size_mb:.2f}MB base64 (PNG 256-color)")
+                return compressed_data
+            
+            # Step 4: Emergency - more aggressive resize - YOUR EXACT LOGIC
+            logger.info(f"  ⚠️ Applying emergency resize (50%)...")
+            width, height = img.size
+            new_size = (int(width * 0.5), int(height * 0.5))
+            img_emergency = img.resize(new_size, Image.Resampling.LANCZOS)
+            
+            if img_emergency.mode != 'P':
+                img_emergency = img_emergency.quantize(colors=256)
+            
+            buffer = io.BytesIO()
+            img_emergency.save(buffer, format='PNG', optimize=True, compress_level=9)
+            buffer.seek(0)
+            
+            compressed_data = buffer.getvalue()
+            base64_size = len(base64.b64encode(compressed_data))
+            size_mb = base64_size / (1024 * 1024)
+            
+            logger.info(f"  Final size: {size_mb:.2f}MB base64 (PNG 50% resize + 256 colors)")
+            return compressed_data
+            
+    except Exception as e:
+        logger.error(f"  ❌ Error processing image: {e}")
+        # Last resort: try original image
+        return image_bytes
+
 async def extract_from_image(
     image_bytes: bytes,
     equipment_number: str,
@@ -95,7 +213,24 @@ async def extract_from_image(
 ) -> str:
     """Extract component data from image using equipment-specific prompt"""
     try:
-        image_base64 = base64.standard_b64encode(image_bytes).decode("utf-8")
+
+        # Compress image if it's too large for Claude
+        logger.debug(f"Original image size: {len(image_bytes):,} bytes")
+        compressed_bytes = compress_image_bytes_for_api(image_bytes)
+        logger.debug(f"Compressed image size: {len(compressed_bytes):,} bytes")
+        
+        image_base64 = base64.standard_b64encode(compressed_bytes).decode("utf-8")
+
+        # Verify we're under the limit
+        base64_size = len(compressed_bytes) * 3 / 4  # Approximate byte size
+        max_size = 5 * 1024 * 1024  # 5MB
+        
+        if base64_size > max_size:
+            logger.error(f"Image still too large: {base64_size:.0f} bytes > {max_size} bytes")
+            raise ValueError(f"Image exceeds Claude's 5MB limit after compression: {base64_size:.0f} bytes")
+        
+        logger.debug(f"Base64 image size: ~{base64_size:.0f} bytes")
+
         
         # Build prompt if not provided
         if not prompt:
