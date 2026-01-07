@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+
+{% block title %}Upload & Extract - AutoRBI{% endblock %}
+
+{% block content %}
+<div class="extract-page">
+    <!-- Page Header -->
+    <div class="mb-4">
+        <h2 class="fw-bold">
+            <i class="bi bi-file-earmark-arrow-up"></i> Upload & Extract
+        </h2>
+        <p class="text-muted">Upload GA Drawing PDFs and let AI extract equipment data automatically</p>
+    </div>
+
+    <div class="card border-0 shadow-sm">
+        <div class="card-body p-4">
+            <form method="POST" action="{{ url_for('extract.start_extraction') }}" enctype="multipart/form-data">
+                <!-- Step 1: Select Work -->
+                <div class="mb-4">
+                    <h5 class="mb-3">
+                        <span class="badge bg-primary rounded-circle me-2">1</span>
+                        Select Work Project
+                    </h5>
+                    <select class="form-select form-select-lg" name="work_id" id="work_id" required>
+                        <option value="">Choose a work project...</option>
+                        {% for work in works %}
+                        <option value="{{ work.id }}">{{ work.name }}</option>
+                        {% endfor %}
+                    </select>
+                    <small class="text-muted">
+                        Don't have a work project? 
+                        <a href="{{ url_for('works.list_works') }}">Create one here</a>
+                    </small>
+                </div>
+
+                <hr>
+
+                <!-- Step 2: Upload PDF -->
+                <div class="mb-4">
+                    <h5 class="mb-3">
+                        <span class="badge bg-primary rounded-circle me-2">2</span>
+                        Upload GA Drawing PDF
+                    </h5>
+                    
+                    <div class="upload-area" id="uploadArea">
+                        <input type="file" class="form-control d-none" id="file" name="file" 
+                               accept=".pdf" required>
+                        <div class="upload-placeholder text-center py-5" id="uploadPlaceholder">
+                            <i class="bi bi-cloud-arrow-up text-primary" style="font-size: 4rem;"></i>
+                            <h5 class="mt-3">Drag & Drop PDF Here</h5>
+                            <p class="text-muted">or</p>
+                            <button type="button" class="btn btn-outline-primary" onclick="document.getElementById('file').click()">
+                                <i class="bi bi-folder2-open"></i> Browse Files
+                            </button>
+                            <p class="text-muted mt-3 mb-0">
+                                <small>Maximum file size: 50MB | Format: PDF only</small>
+                            </p>
+                        </div>
+                        <div class="upload-preview d-none" id="uploadPreview">
+                            <div class="d-flex align-items-center justify-content-between p-3 bg-light rounded">
+                                <div class="d-flex align-items-center">
+                                    <i class="bi bi-file-pdf text-danger fs-1 me-3"></i>
+                                    <div>
+                                        <strong id="fileName"></strong>
+                                        <p class="text-muted mb-0" id="fileSize"></p>
+                                    </div>
+                                </div>
+                                <button type="button" class="btn btn-outline-danger" onclick="removeFile()">
+                                    <i class="bi bi-trash"></i> Remove
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <hr>
+
+                <!-- Submit Button -->
+                <div class="text-center">
+                    <button type="submit" class="btn btn-primary btn-lg" id="extractBtn">
+                        <i class="bi bi-rocket-takeoff"></i> Start Extraction
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .upload-area {
+        border: 2px dashed #dee2e6;
+        border-radius: 8px;
+        background: #f8f9fa;
+        transition: all 0.3s;
+    }
+    .upload-area.dragover {
+        border-color: #0d6efd;
+        background: #e7f3ff;
+    }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const fileInput = document.getElementById('file');
+    const uploadArea = document.getElementById('uploadArea');
+    const uploadPlaceholder = document.getElementById('uploadPlaceholder');
+    const uploadPreview = document.getElementById('uploadPreview');
+    const fileName = document.getElementById('fileName');
+    const fileSize = document.getElementById('fileSize');
+
+    // File input change
+    fileInput.addEventListener('change', function(e) {
+        if (this.files.length > 0) {
+            showFilePreview(this.files[0]);
+        }
+    });
+
+    // Drag and drop
+    uploadArea.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        this.classList.add('dragover');
+    });
+
+    uploadArea.addEventListener('dragleave', function(e) {
+        e.preventDefault();
+        this.classList.remove('dragover');
+    });
+
+    uploadArea.addEventListener('drop', function(e) {
+        e.preventDefault();
+        this.classList.remove('dragover');
+        
+        if (e.dataTransfer.files.length > 0) {
+            const file = e.dataTransfer.files[0];
+            if (file.type === 'application/pdf') {
+                fileInput.files = e.dataTransfer.files;
+                showFilePreview(file);
+            } else {
+                alert('Please upload a PDF file only.');
+            }
+        }
+    });
+
+    function showFilePreview(file) {
+        fileName.textContent = file.name;
+        fileSize.textContent = formatFileSize(file.size);
+        uploadPlaceholder.classList.add('d-none');
+        uploadPreview.classList.remove('d-none');
+    }
+
+    function removeFile() {
+        fileInput.value = '';
+        uploadPreview.classList.add('d-none');
+        uploadPlaceholder.classList.remove('d-none');
+    }
+
+    function formatFileSize(bytes) {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+    }
+</script>
+{% endblock %}

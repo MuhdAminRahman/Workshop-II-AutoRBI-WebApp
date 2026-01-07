@@ -1,0 +1,638 @@
+{% extends "base.html" %}
+
+{% block title %}Review Extracted Data - {{ work.name }} - AutoRBI{% endblock %}
+
+{% block content %}
+<div class="review-data-page">
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('works.list_works') }}">Works</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('works.view_work', work_id=work.id) }}">{{ work.name }}</a></li>
+            <li class="breadcrumb-item active">Review Data</li>
+        </ol>
+    </nav>
+
+    <!-- Page Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="fw-bold mb-1">
+                <i class="bi bi-table"></i> Review Extracted Data
+            </h2>
+            <p class="text-muted mb-0">Review and edit extracted equipment component data</p>
+        </div>
+        <div class="btn-group">
+            {% if session.user.role != 'Admin' %}
+            <button type="button" class="btn btn-success" id="saveChangesBtn">
+                <i class="bi bi-save"></i> Save Changes
+            </button>
+            <button type="button" class="btn btn-primary" id="validateDataBtn">
+                <i class="bi bi-check-circle"></i> Validate All
+            </button>
+            {% endif %}
+            <a href="{{ url_for('works.extract_page', work_id=work.id) }}" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left"></i> Back
+            </a>
+        </div>
+    </div>
+
+    <!-- Statistics Card -->
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body">
+            <div class="row text-center">
+                <div class="col-md-3">
+                    <div class="stat-card">
+                        <i class="bi bi-gear-fill text-primary fs-3"></i>
+                        <h4 class="mb-0 mt-2" id="totalEquipment">{{ equipment_list|length }}</h4>
+                        <small class="text-muted">Equipment Items</small>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stat-card">
+                        <i class="bi bi-box text-info fs-3"></i>
+                        <h4 class="mb-0 mt-2" id="totalComponents">0</h4>
+                        <small class="text-muted">Components</small>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stat-card">
+                        <i class="bi bi-pencil-square text-warning fs-3"></i>
+                        <h4 class="mb-0 mt-2" id="fieldsToFill">0</h4>
+                        <small class="text-muted">Fields to Fill</small>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stat-card">
+                        <i class="bi bi-check-circle-fill text-success fs-3"></i>
+                        <h4 class="mb-0 mt-2" id="fieldsCorrected">0</h4>
+                        <small class="text-muted">Fields Corrected</small>
+                    </div>
+                </div>
+            </div>
+            <div class="mt-3">
+                <div class="progress" style="height: 25px;">
+                    <div id="completionProgress" class="progress-bar bg-success progress-bar-striped" 
+                         role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+                        <span class="fw-bold">0% Complete</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Validation Alerts -->
+    <div id="validationAlert" class="alert alert-warning d-none mb-4">
+        <div class="d-flex align-items-center">
+            <i class="bi bi-exclamation-triangle-fill fs-4 me-3"></i>
+            <div>
+                <strong>Validation Issues Found</strong>
+                <ul id="validationIssues" class="mb-0 mt-2"></ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- Data Tables - Separate table per equipment -->
+    <div id="dataTablesContainer">
+        {% for equipment in equipment_list %}
+        <div class="card border-0 shadow-sm mb-4 equipment-card" data-equipment-id="{{ equipment.id }}">
+            <div class="card-header bg-dark text-white py-2">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0">
+                        <i class="bi bi-gear-fill"></i> 
+                        {{ equipment.equipment_number }} - {{ equipment.description or 'No description' }}
+                    </h6>
+                    <span class="badge bg-warning text-dark">{{ equipment.components|length }} components</span>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-bordered table-sm mb-0 data-table">
+                        <thead class="table-yellow">
+                            <tr>
+                                <th rowspan="2" class="align-middle text-center" style="min-width: 60px;">NO.</th>
+                                <th rowspan="2" class="align-middle text-center" style="min-width: 120px;">EQUIPMENT<br>NO.</th>
+                                <th rowspan="2" class="align-middle text-center" style="min-width: 120px;">PMT NO.</th>
+                                <th rowspan="2" class="align-middle text-center" style="min-width: 150px;">EQUIPMENT<br>DESCRIPTION</th>
+                                <th rowspan="2" class="align-middle text-center" style="min-width: 120px;">PARTS</th>
+                                <th rowspan="2" class="align-middle text-center" style="min-width: 80px;">PHASE</th>
+                                <th rowspan="2" class="align-middle text-center" style="min-width: 100px;">FLUID</th>
+                                <th colspan="3" class="text-center" style="border-bottom: 1px solid #000;">MATERIAL INFORMATION</th>
+                                <th rowspan="2" class="align-middle text-center" style="min-width: 100px;">INSULATION<br>(YES/NO)</th>
+                                <th colspan="2" class="text-center" style="border-bottom: 1px solid #000;">DESIGN</th>
+                                <th colspan="2" class="text-center" style="border-bottom: 1px solid #000;">OPERATING</th>
+                            </tr>
+                            <tr>
+                                <th class="text-center" style="min-width: 120px;">TYPE</th>
+                                <th class="text-center" style="min-width: 100px;">SPEC.</th>
+                                <th class="text-center" style="min-width: 80px;">GRADE</th>
+                                <th class="text-center" style="min-width: 100px;">TEMP.<br>(°C)</th>
+                                <th class="text-center" style="min-width: 100px;">PRESSURE<br>(MPA)</th>
+                                <th class="text-center" style="min-width: 100px;">TEMP.<br>(°C)</th>
+                                <th class="text-center" style="min-width: 100px;">PRESSURE<br>(MPA)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% if equipment.components %}
+                                {% for component in equipment.components %}
+                                <tr class="component-row" 
+                                    data-component-id="{{ component.id }}"
+                                    data-equipment-id="{{ equipment.id }}"
+                                    data-equipment-number="{{ equipment.equipment_number }}">
+                                    <td class="text-center">{{ loop.index }}</td>
+                                    <td class="text-center"><strong>{{ equipment.equipment_number }}</strong></td>
+                                    <td class="text-center">{{ equipment.pmt_number or '' }}</td>
+                                    <td>{{ equipment.description or '' }}</td>
+                                    <td><strong>{{ component.component_name }}</strong></td>
+                                    <td class="text-center">{{ component.phase or '' }}</td>
+                                    {% if session.user.role != 'Admin' %}
+                                    <!-- Editable fields for engineers -->
+                                    <td><input type="text" class="form-control form-control-sm editable-field" 
+                                               data-field="fluid" value="{{ component.fluid or '' }}" 
+                                               data-original="{{ component.fluid or '' }}"></td>
+                                    <td><input type="text" class="form-control form-control-sm editable-field" 
+                                               data-field="material_type" value="{{ component.material_type or '' }}"
+                                               data-original="{{ component.material_type or '' }}"></td>
+                                    <td><input type="text" class="form-control form-control-sm editable-field" 
+                                               data-field="material_spec" value="{{ component.material_spec or '' }}"
+                                               data-original="{{ component.material_spec or '' }}"></td>
+                                    <td><input type="text" class="form-control form-control-sm editable-field" 
+                                               data-field="material_grade" value="{{ component.material_grade or '' }}"
+                                               data-original="{{ component.material_grade or '' }}"></td>
+                                    <td><input type="text" class="form-control form-control-sm editable-field text-center" 
+                                               data-field="insulation" value="{{ component.insulation or '' }}"
+                                               data-original="{{ component.insulation or '' }}"
+                                               placeholder="yes/No"></td>
+                                    <td><input type="text" class="form-control form-control-sm editable-field text-end" 
+                                               data-field="design_temp" value="{{ component.design_temp or '' }}"
+                                               data-original="{{ component.design_temp or '' }}"></td>
+                                    <td><input type="text" class="form-control form-control-sm editable-field text-end" 
+                                               data-field="design_pressure" value="{{ component.design_pressure or '' }}"
+                                               data-original="{{ component.design_pressure or '' }}"></td>
+                                    <td><input type="text" class="form-control form-control-sm editable-field text-end" 
+                                               data-field="operating_temp" value="{{ component.operating_temp or '' }}"
+                                               data-original="{{ component.operating_temp or '' }}"></td>
+                                    <td><input type="text" class="form-control form-control-sm editable-field text-end" 
+                                               data-field="operating_pressure" value="{{ component.operating_pressure or '' }}"
+                                               data-original="{{ component.operating_pressure or '' }}"></td>
+                                    {% else %}
+                                    <!-- Read-only for admins -->
+                                    <td>{{ component.fluid or '' }}</td>
+                                    <td>{{ component.material_type or '' }}</td>
+                                    <td>{{ component.material_spec or '' }}</td>
+                                    <td>{{ component.material_grade or '' }}</td>
+                                    <td class="text-center">{{ component.insulation or '' }}</td>
+                                    <td class="text-end">{{ component.design_temp or '' }}</td>
+                                    <td class="text-end">{{ component.design_pressure or '' }}</td>
+                                    <td class="text-end">{{ component.operating_temp or '' }}</td>
+                                    <td class="text-end">{{ component.operating_pressure or '' }}</td>
+                                    {% endif %}
+                                </tr>
+                                {% endfor %}
+                            {% else %}
+                                <tr>
+                                    <td colspan="15" class="text-center text-muted py-3">
+                                        <i class="bi bi-inbox"></i> No components for this equipment
+                                    </td>
+                                </tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Empty State -->
+    {% if not equipment_list %}
+    <div class="card border-0 shadow-sm">
+        <div class="card-body text-center py-5">
+            <i class="bi bi-inbox text-muted" style="font-size: 4rem;"></i>
+            <h4 class="mt-3 text-muted">No Extracted Data</h4>
+            <p class="text-muted">No equipment data has been extracted yet. Start by uploading a GA drawing.</p>
+            <a href="{{ url_for('works.extract_page', work_id=work.id) }}" class="btn btn-primary mt-2">
+                <i class="bi bi-upload"></i> Upload GA Drawing
+            </a>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .stat-card {
+        padding: 15px;
+        border-radius: 8px;
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    }
+
+    .equipment-card {
+        margin-bottom: 30px;
+        scroll-margin-top: 100px;
+    }
+
+    .equipment-card .card-header {
+        background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+        border-bottom: 3px solid #C9A02C;
+    }
+
+    .data-table {
+        font-size: 12px;
+        border-collapse: collapse;
+        width: 100%;
+        table-layout: auto;
+    }
+
+    /* Yellow theme for table header */
+    .table-yellow {
+        background-color: #C9A02C !important;
+        color: #000 !important;
+        font-weight: bold;
+    }
+
+    .table-yellow th {
+        background-color: #C9A02C !important;
+        color: #000 !important;
+        font-size: 10px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+        padding: 8px 6px;
+        border: 1px solid #000 !important;
+        vertical-align: middle;
+        white-space: nowrap;
+    }
+
+    .data-table tbody td {
+        padding: 6px 8px;
+        vertical-align: middle;
+        border: 1px solid #000;
+        font-size: 11px;
+        white-space: nowrap;
+    }
+
+    .data-table tbody tr:nth-child(even) {
+        background-color: #2C3E50;
+        color: #fff;
+    }
+
+    .data-table tbody tr:nth-child(odd) {
+        background-color: #34495E;
+        color: #fff;
+    }
+
+    .editable-field {
+        font-size: 11px;
+        padding: 3px 6px;
+        height: 28px;
+        border: 1px solid #ced4da;
+        transition: all 0.2s;
+        width: 100%;
+    }
+
+    .editable-field:focus {
+        border-color: #0d6efd;
+        box-shadow: 0 0 0 0.15rem rgba(13, 110, 253, 0.25);
+        outline: none;
+    }
+
+    .editable-field.modified {
+        background-color: #fff3cd;
+        border-color: #ffc107;
+    }
+
+    .editable-field.error {
+        background-color: #f8d7da;
+        border-color: #dc3545;
+    }
+
+    .editable-field.valid {
+        background-color: #d1e7dd;
+        border-color: #198754;
+    }
+
+    .sticky-top {
+        position: sticky;
+        top: 56px;
+        z-index: 10;
+    }
+
+    .component-row:hover {
+        background-color: rgba(255, 217, 102, 0.2) !important;
+    }
+
+    .table-responsive {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    /* Print styles */
+    @media print {
+        .table-yellow th {
+            background-color: #FFD966 !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+    }
+
+    [data-theme="dark"] .stat-card {
+        background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%);
+    }
+
+    [data-theme="dark"] .table-yellow th {
+        background-color: #B8860B !important;
+        color: #fff !important;
+    }
+
+    [data-theme="dark"] .editable-field {
+        background-color: #2d3748;
+        border-color: #4a5568;
+        color: #e2e8f0;
+    }
+
+    [data-theme="dark"] .editable-field:focus {
+        background-color: #1a202c;
+        border-color: #4299e1;
+    }
+
+    [data-theme="dark"] .data-table tbody tr:nth-child(even) {
+        background-color: #1a202c;
+    }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Track changes
+let changedFields = new Set();
+let originalData = {};
+let correctionStats = {
+    totalFieldsToFill: 0,
+    fieldsCorrected: 0,
+    totalComponents: 0
+};
+
+// Initialize
+document.addEventListener('DOMContentLoaded', function() {
+    initializeData();
+    setupEventListeners();
+    updateStatistics();
+});
+
+function initializeData() {
+    // Store original data and count empty fields
+    document.querySelectorAll('.component-row').forEach(row => {
+        const equipmentNo = row.dataset.equipmentNumber;
+        const componentName = row.dataset.componentName;
+        const key = `${equipmentNo}::${componentName}`;
+        
+        originalData[key] = {};
+        let emptyFields = 0;
+        
+        row.querySelectorAll('.editable-field').forEach(field => {
+            const fieldName = field.dataset.field;
+            const value = field.value.trim();
+            originalData[key][fieldName] = value;
+            
+            if (!value) {
+                emptyFields++;
+            }
+        });
+        
+        correctionStats.totalFieldsToFill += emptyFields;
+        correctionStats.totalComponents++;
+    });
+}
+
+function setupEventListeners() {
+    // Track field changes
+    document.querySelectorAll('.editable-field').forEach(field => {
+        field.addEventListener('input', handleFieldChange);
+        field.addEventListener('blur', handleFieldBlur);
+    });
+
+    // Save button
+    const saveBtn = document.getElementById('saveChangesBtn');
+    if (saveBtn) {
+        saveBtn.addEventListener('click', saveChanges);
+    }
+
+    // Validate button
+    const validateBtn = document.getElementById('validateDataBtn');
+    if (validateBtn) {
+        validateBtn.addEventListener('click', validateAllData);
+    }
+}
+
+function handleFieldChange(e) {
+    const field = e.target;
+    const row = field.closest('.component-row');
+    const equipmentNo = row.dataset.equipmentNumber;
+    const componentName = row.dataset.componentName;
+    const fieldName = field.dataset.field;
+    const key = `${equipmentNo}::${componentName}::${fieldName}`;
+    
+    const originalValue = field.dataset.original || '';
+    const currentValue = field.value.trim();
+    
+    // Mark as modified if changed
+    if (currentValue !== originalValue) {
+        field.classList.add('modified');
+        changedFields.add(key);
+        
+        // Track correction if field was originally empty and now filled
+        if (!originalValue && currentValue) {
+            correctionStats.fieldsCorrected++;
+            updateStatistics();
+        }
+    } else {
+        field.classList.remove('modified');
+        changedFields.delete(key);
+    }
+}
+
+function handleFieldBlur(e) {
+    const field = e.target;
+    validateField(field);
+}
+
+function validateField(field) {
+    const fieldName = field.dataset.field;
+    const value = field.value.trim();
+    
+    field.classList.remove('error', 'valid');
+    
+    // Basic validation
+    if (fieldName.includes('temp') || fieldName.includes('pressure')) {
+        // Check if it's a valid number or has units
+        if (value && !(/^-?\d+(\.\d+)?/.test(value))) {
+            field.classList.add('error');
+            field.title = 'Should be a number with optional units (e.g., 100°C, 50 bar)';
+            return false;
+        }
+    }
+    
+    if (value) {
+        field.classList.add('valid');
+    }
+    
+    return true;
+}
+
+function validateAllData() {
+    const issues = [];
+    let hasErrors = false;
+    
+    document.querySelectorAll('.editable-field').forEach(field => {
+        if (!validateField(field)) {
+            hasErrors = true;
+            const row = field.closest('.component-row');
+            const equipmentNo = row.dataset.equipmentNumber;
+            const componentName = row.dataset.componentName;
+            const fieldName = field.dataset.field;
+            
+            issues.push(`${equipmentNo} - ${componentName}: Invalid ${fieldName}`);
+        }
+    });
+    
+    const alertDiv = document.getElementById('validationAlert');
+    const issuesList = document.getElementById('validationIssues');
+    
+    if (hasErrors) {
+        issuesList.innerHTML = issues.map(issue => `<li>${issue}</li>`).join('');
+        alertDiv.classList.remove('d-none');
+        
+        // Scroll to first error
+        const firstError = document.querySelector('.editable-field.error');
+        if (firstError) {
+            firstError.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            firstError.focus();
+        }
+    } else {
+        alertDiv.classList.add('d-none');
+        showNotification('All data validated successfully!', 'success');
+    }
+    
+    return !hasErrors;
+}
+
+function updateStatistics() {
+    document.getElementById('totalComponents').textContent = correctionStats.totalComponents;
+    document.getElementById('fieldsToFill').textContent = correctionStats.totalFieldsToFill;
+    document.getElementById('fieldsCorrected').textContent = correctionStats.fieldsCorrected;
+    
+    // Update progress bar
+    const percentage = correctionStats.totalFieldsToFill > 0 
+        ? Math.round((correctionStats.fieldsCorrected / correctionStats.totalFieldsToFill) * 100)
+        : 0;
+    
+    const progressBar = document.getElementById('completionProgress');
+    progressBar.style.width = percentage + '%';
+    progressBar.setAttribute('aria-valuenow', percentage);
+    progressBar.innerHTML = `<span class="fw-bold">${percentage}% Complete</span>`;
+}
+
+function saveChanges() {
+    // Validate first
+    if (!validateAllData()) {
+        return;
+    }
+    
+    if (changedFields.size === 0) {
+        showNotification('No changes to save', 'info');
+        return;
+    }
+    
+    // Collect all changes
+    const changes = {};
+    
+    document.querySelectorAll('.component-row').forEach(row => {
+        const componentId = row.dataset.componentId;
+        const data = {};
+        let hasChanges = false;
+        
+        row.querySelectorAll('.editable-field').forEach(field => {
+            const fieldName = field.dataset.field;
+            const value = field.value.trim();
+            const original = field.dataset.original || '';
+            
+            if (value !== original) {
+                data[fieldName] = value;
+                hasChanges = true;
+            }
+        });
+        
+        if (hasChanges) {
+            changes[componentId] = data;
+        }
+    });
+    
+    // Show loading
+    const saveBtn = document.getElementById('saveChangesBtn');
+    const originalText = saveBtn.innerHTML;
+    saveBtn.disabled = true;
+    saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Saving...';
+    
+    // Send to backend
+    fetch('{{ url_for("works.save_components_bulk", work_id=work.id) }}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ changes: changes })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showNotification(`Successfully saved ${data.updated_count} component(s)`, 'success');
+            
+            // Update original data
+            document.querySelectorAll('.editable-field.modified').forEach(field => {
+                field.dataset.original = field.value.trim();
+                field.classList.remove('modified');
+            });
+            
+            changedFields.clear();
+        } else {
+            showNotification('Error: ' + (data.error || 'Failed to save changes'), 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Save error:', error);
+        showNotification('Error saving changes: ' + error.message, 'error');
+    })
+    .finally(() => {
+        saveBtn.disabled = false;
+        saveBtn.innerHTML = originalText;
+    });
+}
+
+function showNotification(message, type = 'info') {
+    // Create notification element
+    const notification = document.createElement('div');
+    notification.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
+    notification.style.cssText = 'top: 80px; right: 20px; z-index: 9999; min-width: 300px;';
+    notification.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    
+    document.body.appendChild(notification);
+    
+    // Auto-dismiss after 5 seconds
+    setTimeout(() => {
+        notification.remove();
+    }, 5000);
+}
+
+// Keyboard shortcuts
+document.addEventListener('keydown', function(e) {
+    // Ctrl+S to save
+    if (e.ctrlKey && e.key === 's') {
+        e.preventDefault();
+        saveChanges();
+    }
+});
+</script>
+{% endblock %}

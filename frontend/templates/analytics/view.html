@@ -1,0 +1,288 @@
+{% extends "base.html" %}
+
+{% block title %}Analytics - {{ work.name }} - AutoRBI{% endblock %}
+
+{% block content %}
+<div class="analytics-view">
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('analytics.index') }}">Analytics</a></li>
+            <li class="breadcrumb-item active">{{ work.name }}</li>
+        </ol>
+    </nav>
+
+    <!-- Page Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="fw-bold mb-0">
+            <i class="bi bi-graph-up"></i> {{ work.name }} Analytics
+        </h2>
+        <a href="{{ url_for('reports.view_reports', work_id=work.id) }}" class="btn btn-outline-success">
+            <i class="bi bi-file-earmark-text"></i> View Reports
+        </a>
+    </div>
+
+    {% if analytics %}
+    <!-- Health Score Card -->
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body text-center py-5">
+            <h3 class="text-muted mb-3">Overall Health Score</h3>
+            <div class="health-score-circle mx-auto mb-3">
+                <svg width="200" height="200">
+                    <circle cx="100" cy="100" r="90" fill="none" stroke="#e9ecef" stroke-width="20"/>
+                    <circle id="healthScoreCircle" cx="100" cy="100" r="90" fill="none" 
+                            stroke="#10b981" stroke-width="20" stroke-linecap="round"
+                            stroke-dasharray="565" stroke-dashoffset="565"
+                            transform="rotate(-90 100 100)"/>
+                    <text x="100" y="105" text-anchor="middle" font-size="40" font-weight="bold" 
+                          fill="#10b981" id="healthScoreText">0</text>
+                    <text x="100" y="130" text-anchor="middle" font-size="16" fill="#6c757d">/100</text>
+                </svg>
+            </div>
+            <p class="text-muted mb-0">
+                Based on extraction completeness, data quality, and coverage
+            </p>
+        </div>
+    </div>
+
+    <!-- Metrics Cards -->
+    <div class="row g-4 mb-4">
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body text-center">
+                    <h6 class="text-muted mb-2">Extraction %</h6>
+                    <h2 class="mb-0 text-primary" id="extractionPercent">0%</h2>
+                    <div class="progress mt-3" style="height: 8px;">
+                        <div class="progress-bar bg-primary" id="extractionBar" style="width: 0%"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body text-center">
+                    <h6 class="text-muted mb-2">Completion %</h6>
+                    <h2 class="mb-0 text-success" id="completionPercent">0%</h2>
+                    <div class="progress mt-3" style="height: 8px;">
+                        <div class="progress-bar bg-success" id="completionBar" style="width: 0%"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body text-center">
+                    <h6 class="text-muted mb-2">Quality %</h6>
+                    <h2 class="mb-0 text-info" id="qualityPercent">0%</h2>
+                    <div class="progress mt-3" style="height: 8px;">
+                        <div class="progress-bar bg-info" id="qualityBar" style="width: 0%"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <!-- Equipment Status Chart -->
+        <div class="col-md-6">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white py-3">
+                    <h5 class="mb-0 fw-bold">
+                        <i class="bi bi-pie-chart"></i> Equipment Status
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="equipmentStatusChart" height="250"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Component Completion Chart -->
+        <div class="col-md-6">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white py-3">
+                    <h5 class="mb-0 fw-bold">
+                        <i class="bi bi-bar-chart"></i> Component Completion
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="componentCompletionChart" height="250"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Critical Gaps -->
+    <div class="card border-0 shadow-sm mt-4">
+        <div class="card-header bg-white py-3">
+            <h5 class="mb-0 fw-bold">
+                <i class="bi bi-exclamation-triangle text-warning"></i> Critical Data Gaps
+            </h5>
+        </div>
+        <div class="card-body" id="criticalGaps">
+            <div class="text-center py-4">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% else %}
+    <!-- No Analytics Data -->
+    <div class="card border-0 shadow-sm">
+        <div class="card-body text-center py-5">
+            <i class="bi bi-bar-chart text-muted" style="font-size: 4rem;"></i>
+            <p class="text-muted mt-3 mb-4">
+                No analytics data available yet. 
+                <a href="{{ url_for('extract.index') }}">Start an extraction</a> to generate analytics.
+            </p>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .health-score-circle {
+        width: 200px;
+        height: 200px;
+    }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+    const workId = {{ work.id }};
+
+    // Load analytics data
+    fetch(`/analytics/${workId}/data`)
+        .then(response => response.json())
+        .then(data => {
+            if (!data.error) {
+                renderAnalytics(data);
+            } else {
+                console.error('Failed to load analytics:', data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error loading analytics:', error);
+        });
+
+    function renderAnalytics(data) {
+        // Health Score
+        const healthScore = data.health_score || 0;
+        const circumference = 565;
+        const offset = circumference - (healthScore / 100) * circumference;
+        
+        document.getElementById('healthScoreCircle').style.strokeDashoffset = offset;
+        document.getElementById('healthScoreText').textContent = healthScore;
+        
+        // Set color based on score
+        let scoreColor = '#10b981'; // green
+        if (healthScore < 50) scoreColor = '#ef4444'; // red
+        else if (healthScore < 75) scoreColor = '#f59e0b'; // orange
+        
+        document.getElementById('healthScoreCircle').style.stroke = scoreColor;
+        document.getElementById('healthScoreText').style.fill = scoreColor;
+
+        // Metrics
+        const extractionPercent = data.extraction_percent || 0;
+        const completionPercent = data.completion_percent || 0;
+        const qualityPercent = data.quality_percent || 0;
+
+        document.getElementById('extractionPercent').textContent = extractionPercent + '%';
+        document.getElementById('extractionBar').style.width = extractionPercent + '%';
+        
+        document.getElementById('completionPercent').textContent = completionPercent + '%';
+        document.getElementById('completionBar').style.width = completionPercent + '%';
+        
+        document.getElementById('qualityPercent').textContent = qualityPercent + '%';
+        document.getElementById('qualityBar').style.width = qualityPercent + '%';
+
+        // Equipment Status Pie Chart
+        const equipmentStatus = data.equipment_status || { completed: 0, in_progress: 0, pending: 0 };
+        new Chart(document.getElementById('equipmentStatusChart'), {
+            type: 'doughnut',
+            data: {
+                labels: ['Completed', 'In Progress', 'Pending'],
+                datasets: [{
+                    data: [
+                        equipmentStatus.completed || 0,
+                        equipmentStatus.in_progress || 0,
+                        equipmentStatus.pending || 0
+                    ],
+                    backgroundColor: ['#10b981', '#f59e0b', '#6c757d']
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom'
+                    }
+                }
+            }
+        });
+
+        // Component Completion Bar Chart
+        const componentCompletion = data.component_completion || [];
+        new Chart(document.getElementById('componentCompletionChart'), {
+            type: 'bar',
+            data: {
+                labels: componentCompletion.map(c => c.equipment_number),
+                datasets: [{
+                    label: 'Completion %',
+                    data: componentCompletion.map(c => c.completion_percent),
+                    backgroundColor: '#0d6efd'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 100
+                    }
+                },
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                }
+            }
+        });
+
+        // Critical Gaps
+        const criticalGaps = data.critical_gaps || [];
+        const gapsContainer = document.getElementById('criticalGaps');
+        
+        if (criticalGaps.length > 0) {
+            gapsContainer.innerHTML = '<div class="list-group">' +
+                criticalGaps.map(gap => `
+                    <div class="list-group-item">
+                        <div class="d-flex align-items-center">
+                            <i class="bi bi-exclamation-triangle text-warning fs-4 me-3"></i>
+                            <div>
+                                <strong>${gap.equipment_number}</strong>: ${gap.issue}
+                                <br><small class="text-muted">${gap.details}</small>
+                            </div>
+                        </div>
+                    </div>
+                `).join('') +
+                '</div>';
+        } else {
+            gapsContainer.innerHTML = `
+                <div class="text-center py-4">
+                    <i class="bi bi-check-circle text-success" style="font-size: 3rem;"></i>
+                    <p class="text-muted mt-3 mb-0">No critical gaps found. Great job!</p>
+                </div>
+            `;
+        }
+    }
+</script>
+{% endblock %}

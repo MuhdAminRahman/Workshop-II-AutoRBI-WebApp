@@ -1,0 +1,251 @@
+{% extends "base.html" %}
+
+{% block title %}Work History - AutoRBI{% endblock %}
+
+{% block extra_css %}
+<style>
+    .activity-timeline {
+        position: relative;
+        padding-left: 30px;
+    }
+    
+    .activity-timeline::before {
+        content: '';
+        position: absolute;
+        left: 10px;
+        top: 0;
+        bottom: 0;
+        width: 2px;
+        background: linear-gradient(to bottom, #0d6efd, #6c757d);
+    }
+    
+    .activity-item {
+        position: relative;
+        margin-bottom: 20px;
+        padding-bottom: 20px;
+        border-bottom: 1px solid #dee2e6;
+    }
+    
+    .activity-item:last-child {
+        border-bottom: none;
+    }
+    
+    .activity-icon {
+        position: absolute;
+        left: -24px;
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: white;
+        border: 3px solid;
+        z-index: 1;
+    }
+    
+    .activity-icon.create {
+        border-color: #198754;
+        color: #198754;
+    }
+    
+    .activity-icon.update {
+        border-color: #0d6efd;
+        color: #0d6efd;
+    }
+    
+    .activity-icon.upload {
+        border-color: #6f42c1;
+        color: #6f42c1;
+    }
+    
+    .activity-icon.extract {
+        border-color: #0dcaf0;
+        color: #0dcaf0;
+    }
+    
+    .activity-icon.complete {
+        border-color: #20c997;
+        color: #20c997;
+    }
+    
+    .activity-icon.delete {
+        border-color: #dc3545;
+        color: #dc3545;
+    }
+    
+    .activity-content {
+        background: #f8f9fa;
+        padding: 15px;
+        border-radius: 8px;
+        margin-left: 10px;
+    }
+    
+    .activity-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: start;
+        margin-bottom: 10px;
+    }
+    
+    .activity-meta {
+        font-size: 0.875rem;
+        color: #6c757d;
+    }
+    
+    [data-theme="dark"] .activity-content {
+        background: #2d3748;
+    }
+    
+    [data-theme="dark"] .activity-icon {
+        background: #1a202c;
+    }
+    
+    .filter-section {
+        background: white;
+        padding: 20px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    
+    [data-theme="dark"] .filter-section {
+        background: #2d3748;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="mb-1 fw-bold">
+                <i class="bi bi-clock-history text-warning"></i> Work History
+            </h2>
+            <p class="text-muted mb-0">View logs and activity history of all works</p>
+        </div>
+        <div>
+            <button class="btn btn-outline-primary" onclick="location.reload()">
+                <i class="bi bi-arrow-clockwise"></i> Refresh
+            </button>
+        </div>
+    </div>
+
+    <!-- Filter Section -->
+    <div class="filter-section">
+        <form method="GET" class="row g-3">
+            <div class="col-md-4">
+                <label class="form-label">Show activities from last</label>
+                <select name="days" class="form-select form-select-sm">
+                    <option value="1" {% if days == 1 %}selected{% endif %}>24 Hours</option>
+                    <option value="7" {% if days == 7 %}selected{% endif %}>7 Days</option>
+                    <option value="14" {% if days == 14 %}selected{% endif %}>14 Days</option>
+                    <option value="30" {% if days == 30 %}selected{% endif %}>30 Days</option>
+                    <option value="90" {% if days == 90 %}selected{% endif %}>90 Days</option>
+                    <option value="365" {% if days == 365 %}selected{% endif %}>1 Year</option>
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Maximum results</label>
+                <select name="limit" class="form-select form-select-sm">
+                    <option value="50" {% if limit == 50 %}selected{% endif %}>50</option>
+                    <option value="100" {% if limit == 100 %}selected{% endif %}>100</option>
+                    <option value="200" {% if limit == 200 %}selected{% endif %}>200</option>
+                    <option value="500" {% if limit == 500 %}selected{% endif %}>500</option>
+                </select>
+            </div>
+            <div class="col-md-4 d-flex align-items-end">
+                <button type="submit" class="btn btn-primary btn-sm w-100">
+                    <i class="bi bi-filter"></i> Apply Filter
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Activity Timeline -->
+    <div class="card border-0 shadow-sm">
+        <div class="card-header py-3">
+            <h5 class="mb-0 fw-bold">
+                <i class="bi bi-list-ul"></i> Activity Log
+                {% if total > 0 %}
+                <span class="badge bg-primary">{{ total }} Activities</span>
+                {% endif %}
+            </h5>
+        </div>
+        <div class="card-body">
+            {% if activities %}
+            <div class="activity-timeline">
+                {% for activity in activities %}
+                <div class="activity-item">
+                    <div class="activity-icon {{ activity.action|lower }}">
+                        {% if activity.action|lower == 'create' %}
+                        <i class="bi bi-plus-circle-fill"></i>
+                        {% elif activity.action|lower == 'update' %}
+                        <i class="bi bi-pencil-fill"></i>
+                        {% elif activity.action|lower == 'upload' %}
+                        <i class="bi bi-upload"></i>
+                        {% elif activity.action|lower == 'extract' %}
+                        <i class="bi bi-file-earmark-arrow-up"></i>
+                        {% elif activity.action|lower == 'complete' %}
+                        <i class="bi bi-check-circle-fill"></i>
+                        {% elif activity.action|lower == 'delete' %}
+                        <i class="bi bi-trash-fill"></i>
+                        {% else %}
+                        <i class="bi bi-circle-fill"></i>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="activity-content">
+                        <div class="activity-header">
+                            <div>
+                                <h6 class="mb-1 fw-bold">
+                                    {{ activity.action|capitalize }}
+                                </h6>
+                                <div class="activity-meta">
+                                    <i class="bi bi-person-circle"></i> User ID: {{ activity.user_id }}
+                                    • <i class="bi bi-tag"></i> {{ activity.entity_type|capitalize }}
+                                    • ID: {{ activity.entity_id }}
+                                </div>
+                            </div>
+                            <div class="text-end">
+                                <small class="text-muted">
+                                    <i class="bi bi-clock"></i> {{ activity.created_at|datetime }}
+                                </small>
+                            </div>
+                        </div>
+                        
+                        {% if activity.data %}
+                        <div class="mt-2 text-muted small">
+                            <pre class="mb-0" style="white-space: pre-wrap; background: rgba(0,0,0,0.05); padding: 8px; border-radius: 4px;">{{ activity.data|tojson(indent=2) }}</pre>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            
+            {% else %}
+            <!-- Empty State -->
+            <div class="text-center py-5">
+                <i class="bi bi-clock-history" style="font-size: 4rem; color: #dee2e6;"></i>
+                <h5 class="mt-3 text-muted">No Activity History</h5>
+                <p class="text-muted">Activity logs will appear here once work operations are performed</p>
+                <a href="{{ url_for('main.dashboard') }}" class="btn btn-primary mt-3">
+                    <i class="bi bi-house"></i> Back to Dashboard
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Auto-refresh every 30 seconds
+    setTimeout(() => {
+        location.reload();
+    }, 30000);
+</script>
+{% endblock %}

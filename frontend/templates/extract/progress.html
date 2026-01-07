@@ -1,0 +1,221 @@
+{% extends "base.html" %}
+
+{% block title %}Extraction Progress - AutoRBI{% endblock %}
+
+{% block content %}
+<div class="progress-page">
+    <!-- Page Header -->
+    <div class="mb-4 text-center">
+        <h2 class="fw-bold">
+            <i class="bi bi-hourglass-split"></i> Extraction in Progress
+        </h2>
+        <p class="text-muted">Please wait while AI extracts equipment data from your PDF...</p>
+    </div>
+
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body p-4">
+                    <!-- Progress Bar -->
+                    <div class="mb-4">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span class="fw-bold">Progress</span>
+                            <span id="progressText">0%</span>
+                        </div>
+                        <div class="progress" style="height: 30px;">
+                            <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                                 id="progressBar" role="progressbar" 
+                                 style="width: 0%">
+                            </div>
+                        </div>
+                        <p class="text-muted mt-2 mb-0 text-center" id="statusText">
+                            Initializing...
+                        </p>
+                    </div>
+
+                    <!-- Statistics -->
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-4 text-center">
+                            <div class="stat-box">
+                                <div class="stat-value" id="totalPages">0</div>
+                                <div class="stat-label">Total Pages</div>
+                            </div>
+                        </div>
+                        <div class="col-md-4 text-center">
+                            <div class="stat-box">
+                                <div class="stat-value text-success" id="processedPages">0</div>
+                                <div class="stat-label">Processed</div>
+                            </div>
+                        </div>
+                        <div class="col-md-4 text-center">
+                            <div class="stat-box">
+                                <div class="stat-value text-info" id="remainingPages">0</div>
+                                <div class="stat-label">Remaining</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Activity Log -->
+                    <div class="activity-log">
+                        <h6 class="fw-bold mb-3">
+                            <i class="bi bi-activity"></i> Activity Log
+                        </h6>
+                        <div class="log-container" id="logContainer">
+                            <div class="log-entry">
+                                <i class="bi bi-info-circle text-info"></i>
+                                <span>Starting extraction process...</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Completion Section (Hidden initially) -->
+                    <div class="text-center mt-4 d-none" id="completionSection">
+                        <div class="alert alert-success">
+                            <i class="bi bi-check-circle-fill"></i>
+                            <strong>Extraction Complete!</strong>
+                        </div>
+                        <a href="{{ url_for('reports.index') }}" class="btn btn-primary">
+                            <i class="bi bi-file-earmark-text"></i> View Reports
+                        </a>
+                        <a href="{{ url_for('extract.index') }}" class="btn btn-outline-secondary">
+                            <i class="bi bi-arrow-left"></i> Back to Upload
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .stat-box {
+        background: #f8f9fa;
+        border-radius: 8px;
+        padding: 20px;
+    }
+    .stat-value {
+        font-size: 2rem;
+        font-weight: bold;
+    }
+    .stat-label {
+        color: #6c757d;
+        font-size: 0.9rem;
+    }
+    .log-container {
+        max-height: 300px;
+        overflow-y: auto;
+        background: #f8f9fa;
+        border-radius: 8px;
+        padding: 15px;
+    }
+    .log-entry {
+        padding: 8px 0;
+        border-bottom: 1px solid #dee2e6;
+    }
+    .log-entry:last-child {
+        border-bottom: none;
+    }
+    .log-entry i {
+        margin-right: 8px;
+    }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const extractionId = {{ extraction_id }};
+    const wsUrl = '{{ ws_url }}';
+    let ws;
+
+    // Connect to WebSocket
+    function connectWebSocket() {
+        ws = new WebSocket(`${wsUrl}/api/ws/extractions/${extractionId}`);
+        
+        ws.onopen = function() {
+            addLog('Connected to extraction server', 'success');
+        };
+        
+        ws.onmessage = function(event) {
+            const data = JSON.parse(event.data);
+            updateProgress(data);
+        };
+        
+        ws.onerror = function(error) {
+            addLog('Connection error. Falling back to polling...', 'danger');
+            startPolling();
+        };
+        
+        ws.onclose = function() {
+            addLog('Connection closed', 'warning');
+        };
+    }
+
+    // Polling fallback
+    function startPolling() {
+        setInterval(function() {
+            fetch(`/extract/status/${extractionId}`)
+                .then(response => response.json())
+                .then(data => updateProgress(data))
+                .catch(error => console.error('Polling error:', error));
+        }, 3000);
+    }
+
+    // Update progress
+    function updateProgress(data) {
+        const total = data.total_pages || 0;
+        const processed = data.processed_pages || 0;
+        const remaining = total - processed;
+        const percentage = total > 0 ? Math.round((processed / total) * 100) : 0;
+        
+        document.getElementById('totalPages').textContent = total;
+        document.getElementById('processedPages').textContent = processed;
+        document.getElementById('remainingPages').textContent = remaining;
+        document.getElementById('progressBar').style.width = percentage + '%';
+        document.getElementById('progressText').textContent = percentage + '%';
+        document.getElementById('statusText').textContent = data.message || 'Processing...';
+        
+        if (data.message) {
+            addLog(data.message, 'info');
+        }
+        
+        if (data.status === 'completed') {
+            document.getElementById('progressBar').classList.remove('progress-bar-animated');
+            document.getElementById('completionSection').classList.remove('d-none');
+            addLog('✓ Extraction completed successfully!', 'success');
+            if (ws) ws.close();
+        } else if (data.status === 'failed') {
+            addLog('✗ Extraction failed: ' + data.error, 'danger');
+            if (ws) ws.close();
+        }
+    }
+
+    // Add log entry
+    function addLog(message, type = 'info') {
+        const logContainer = document.getElementById('logContainer');
+        const entry = document.createElement('div');
+        entry.className = 'log-entry';
+        
+        let icon = 'info-circle';
+        let color = 'info';
+        if (type === 'success') {
+            icon = 'check-circle';
+            color = 'success';
+        } else if (type === 'danger') {
+            icon = 'x-circle';
+            color = 'danger';
+        } else if (type === 'warning') {
+            icon = 'exclamation-triangle';
+            color = 'warning';
+        }
+        
+        entry.innerHTML = `<i class="bi bi-${icon} text-${color}"></i><span>${message}</span>`;
+        logContainer.appendChild(entry);
+        logContainer.scrollTop = logContainer.scrollHeight;
+    }
+
+    // Start connection
+    connectWebSocket();
+</script>
+{% endblock %}
