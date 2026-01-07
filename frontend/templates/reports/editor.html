@@ -1,0 +1,209 @@
+{% extends "base.html" %}
+
+{% block title %}Edit Excel Data - {{ work.name }} - AutoRBI{% endblock %}
+
+{% block content %}
+<div class="editor-page">
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('reports.index') }}">Reports</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('reports.view_reports', work_id=work.id) }}">{{ work.name }}</a></li>
+            <li class="breadcrumb-item active">Edit Excel v{{ version }}</li>
+        </ol>
+    </nav>
+
+    <!-- Page Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="fw-bold mb-0">
+            <i class="bi bi-pencil"></i> Edit Excel Data
+        </h2>
+        <div>
+            <button class="btn btn-success" id="saveBtn">
+                <i class="bi bi-save"></i> Save Changes
+            </button>
+            <a href="{{ url_for('reports.view_reports', work_id=work.id) }}" class="btn btn-outline-secondary">
+                <i class="bi bi-x"></i> Cancel
+            </a>
+        </div>
+    </div>
+
+    <!-- Info Alert -->
+    <div class="alert alert-info">
+        <i class="bi bi-info-circle"></i>
+        Edit the extracted data below. Changes will be saved to the database and reflected in the next Excel export.
+    </div>
+
+    <!-- Excel Data Table -->
+    <div class="card border-0 shadow-sm">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-bordered table-hover mb-0" id="dataTable">
+                    <thead class="table-light sticky-top">
+                        <tr>
+                            <th>Equipment</th>
+                            <th>Component</th>
+                            <th>Fluid</th>
+                            <th>Material</th>
+                            <th>Design Temp</th>
+                            <th>Operating Temp</th>
+                            <th>Design Pressure</th>
+                            <th>Operating Pressure</th>
+                            <th>Thickness</th>
+                            <th>Diameter</th>
+                            <th>Length</th>
+                            <th>Insulation Type</th>
+                            <th>Insulation Thickness</th>
+                        </tr>
+                    </thead>
+                    <tbody id="dataTableBody">
+                        <!-- Data will be loaded dynamically -->
+                        <tr>
+                            <td colspan="13" class="text-center py-5">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                                <p class="text-muted mt-2">Loading data...</p>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .table-responsive {
+        max-height: 70vh;
+        overflow-y: auto;
+    }
+    .sticky-top {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+    }
+    .table input {
+        border: 1px solid transparent;
+        padding: 4px 8px;
+        width: 100%;
+    }
+    .table input:focus {
+        border-color: #0d6efd;
+        outline: none;
+    }
+    td {
+        padding: 4px !important;
+    }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const workId = {{ work.id }};
+    const version = {{ version }};
+    let tableData = [];
+
+    // Load data
+    fetch(`/works/${workId}`)
+        .then(response => response.json())
+        .then(data => {
+            renderTable(data);
+        })
+        .catch(error => {
+            console.error('Error loading data:', error);
+            document.getElementById('dataTableBody').innerHTML = `
+                <tr>
+                    <td colspan="13" class="text-center py-5 text-danger">
+                        <i class="bi bi-exclamation-triangle"></i>
+                        Failed to load data. Please try again.
+                    </td>
+                </tr>
+            `;
+        });
+
+    function renderTable(work) {
+        const tbody = document.getElementById('dataTableBody');
+        tbody.innerHTML = '';
+
+        if (!work.equipment || work.equipment.length === 0) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="13" class="text-center py-5">
+                        <i class="bi bi-inbox"></i>
+                        No equipment data available.
+                    </td>
+                </tr>
+            `;
+            return;
+        }
+
+        work.equipment.forEach(equipment => {
+            if (equipment.components && equipment.components.length > 0) {
+                equipment.components.forEach(component => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${equipment.equipment_number}</td>
+                        <td>${component.component_number || ''}</td>
+                        <td><input type="text" value="${component.fluid || ''}" data-field="fluid" data-id="${component.id}"></td>
+                        <td><input type="text" value="${component.material || ''}" data-field="material" data-id="${component.id}"></td>
+                        <td><input type="text" value="${component.design_temp || ''}" data-field="design_temp" data-id="${component.id}"></td>
+                        <td><input type="text" value="${component.operating_temp || ''}" data-field="operating_temp" data-id="${component.id}"></td>
+                        <td><input type="text" value="${component.design_pressure || ''}" data-field="design_pressure" data-id="${component.id}"></td>
+                        <td><input type="text" value="${component.operating_pressure || ''}" data-field="operating_pressure" data-id="${component.id}"></td>
+                        <td><input type="text" value="${component.thickness || ''}" data-field="thickness" data-id="${component.id}"></td>
+                        <td><input type="text" value="${component.diameter || ''}" data-field="diameter" data-id="${component.id}"></td>
+                        <td><input type="text" value="${component.length || ''}" data-field="length" data-id="${component.id}"></td>
+                        <td><input type="text" value="${component.insulation_type || ''}" data-field="insulation_type" data-id="${component.id}"></td>
+                        <td><input type="text" value="${component.insulation_thickness || ''}" data-field="insulation_thickness" data-id="${component.id}"></td>
+                    `;
+                    tbody.appendChild(row);
+                });
+            }
+        });
+    }
+
+    // Save changes
+    document.getElementById('saveBtn').addEventListener('click', function() {
+        const components = [];
+        const inputs = document.querySelectorAll('input[data-id]');
+        
+        inputs.forEach(input => {
+            const componentId = input.dataset.id;
+            const field = input.dataset.field;
+            const value = input.value;
+            
+            let component = components.find(c => c.id === parseInt(componentId));
+            if (!component) {
+                component = { id: parseInt(componentId) };
+                components.push(component);
+            }
+            component[field] = value;
+        });
+
+        // Send to server
+        fetch(`/reports/${workId}/excel/${version}/update`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ components })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('Changes saved successfully!');
+                window.location.href = `/reports/${workId}`;
+            } else {
+                alert('Failed to save changes: ' + (data.error || 'Unknown error'));
+            }
+        })
+        .catch(error => {
+            console.error('Error saving data:', error);
+            alert('Failed to save changes. Please try again.');
+        });
+    });
+</script>
+{% endblock %}

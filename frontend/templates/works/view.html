@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+
+{% block title %}{{ work.name }} - AutoRBI{% endblock %}
+
+{% block content %}
+<div class="work-details">
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('works.list_works') }}">Works</a></li>
+            <li class="breadcrumb-item active">{{ work.name }}</li>
+        </ol>
+    </nav>
+
+    <!-- Page Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="fw-bold mb-0">
+            <i class="bi bi-folder-open"></i> {{ work.name }}
+        </h2>
+        <div>
+            <a href="{{ url_for('works.review_data', work_id=work.id) }}" class="btn btn-primary">
+                <i class="bi bi-table"></i> Review Data
+            </a>
+            <a href="{{ url_for('reports.view_reports', work_id=work.id) }}" class="btn btn-outline-success">
+                <i class="bi bi-file-earmark-text"></i> Reports
+            </a>
+            <a href="{{ url_for('analytics.view_analytics', work_id=work.id) }}" class="btn btn-outline-info">
+                <i class="bi bi-graph-up"></i> Analytics
+            </a>
+        </div>
+    </div>
+
+    <!-- Work Info Card -->
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <h5 class="mb-3">Work Information</h5>
+                    <table class="table table-sm">
+                        <tr>
+                            <th width="150">Work ID:</th>
+                            <td>#{{ work.id }}</td>
+                        </tr>
+                        <tr>
+                            <th>Status:</th>
+                            <td>
+                                <span class="badge bg-{{ get_status_badge_class(work.status) }}">
+                                    {{ work.status|capitalize }}
+                                </span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>Description:</th>
+                            <td>{{ work.description or 'No description' }}</td>
+                        </tr>
+                        <tr>
+                            <th>Created:</th>
+                            <td>{{ work.created_at|datetime }}</td>
+                        </tr>
+                    </table>
+                </div>
+                <div class="col-md-6">
+                    <h5 class="mb-3">Statistics</h5>
+                    <div class="row g-3">
+                        <div class="col-6">
+                            <div class="stat-box">
+                                <div class="stat-value">{{ work.equipment|length if work.equipment else 0 }}</div>
+                                <div class="stat-label">Equipment</div>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="stat-box">
+                                <div class="stat-value">0</div>
+                                <div class="stat-label">Extractions</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Equipment List -->
+    {% if work.equipment %}
+    <div class="card border-0 shadow-sm">
+        <div class="card-header bg-white py-3">
+            <h5 class="mb-0 fw-bold">
+                <i class="bi bi-gear"></i> Equipment List
+            </h5>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Equipment Number</th>
+                            <th>PMT Number</th>
+                            <th>Components</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for equipment in work.equipment %}
+                        <tr>
+                            <td><strong>{{ equipment.equipment_number }}</strong></td>
+                            <td>{{ equipment.pmt_number }}</td>
+                            <td>
+                                <span class="badge bg-info">
+                                    {{ equipment.components|length if equipment.components else 0 }} components
+                                </span>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .stat-box {
+        background: #f8f9fa;
+        border-radius: 8px;
+        padding: 20px;
+        text-align: center;
+    }
+    .stat-value {
+        font-size: 2rem;
+        font-weight: bold;
+        color: #0d6efd;
+    }
+    .stat-label {
+        color: #6c757d;
+        font-size: 0.9rem;
+    }
+</style>
+{% endblock %}

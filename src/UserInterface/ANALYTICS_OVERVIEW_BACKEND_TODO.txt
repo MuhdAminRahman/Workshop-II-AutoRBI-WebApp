@@ -1,0 +1,408 @@
+================================================================================
+ANALYTICS OVERVIEW - BACKEND INTEGRATION TODO LIST
+================================================================================
+
+File: src/UserInterface/views/main_menu.py
+Feature: Analytics Overview Dashboard on Main Menu
+Status: UI Implementation Complete - Backend Integration Required
+Date Created: December 30, 2025
+
+================================================================================
+PRIORITY: HIGH - CORE FUNCTIONALITY
+================================================================================
+
+TODO #1: Work Completion Metric Integration
+--------------------------------------------------------------------------------
+Location: main_menu.py -> _build_embedded_analytics() method
+Current Status: Using placeholder value (75%)
+
+Required Implementation:
+  1. Query total works from Work table
+  2. Query completed works (filter by status = 'completed' or similar)
+  3. Calculate completion percentage
+  
+Code Example:
+  ```python
+  from AutoRBI_Database.database.models.work import Work
+  from AutoRBI_Database.database.session import SessionLocal
+  
+  db = SessionLocal()
+  try:
+      total_works = db.query(Work).count()
+      completed_works = db.query(Work).filter(
+          Work.status == 'completed'  # Adjust status field name as needed
+      ).count()
+      work_completion = (completed_works / total_works * 100) if total_works > 0 else 0
+  finally:
+      db.close()
+  ```
+
+Database Tables Involved:
+  - Work table (check status field name and valid completion status values)
+
+Notes:
+  - Replace the placeholder: work_completion = 75
+  - Ensure proper handling when no works exist (divide by zero)
+  - Consider filtering by current user if multi-user system
+
+
+TODO #2: Equipment Extraction Metric Integration
+--------------------------------------------------------------------------------
+Location: main_menu.py -> _build_embedded_analytics() method
+Current Status: Using placeholder values (45/60)
+
+Required Implementation:
+  1. Query total equipment count for current work
+  2. Query extracted equipment count (where extracted_date IS NOT NULL)
+  3. Calculate extraction percentage
+  
+Code Example:
+  ```python
+  from AutoRBI_Database.database.models.equipment import Equipment
+  
+  current_work_id = self.controller.current_work.get("work_id") if self.controller.current_work else None
+  
+  if current_work_id:
+      total_equipment = db.query(Equipment).filter(
+          Equipment.work_id == current_work_id
+      ).count()
+      
+      equipment_extracted = db.query(Equipment).filter(
+          Equipment.work_id == current_work_id,
+          Equipment.extracted_date.isnot(None)
+      ).count()
+      
+      extraction_percent = (equipment_extracted / total_equipment * 100) if total_equipment > 0 else 0
+  ```
+
+Database Tables Involved:
+  - Equipment table (fields: work_id, extracted_date)
+
+Notes:
+  - Replace placeholders: equipment_extracted = 45, total_equipment = 60
+  - Handle case when no work is selected (current_work_id is None)
+  - Ensure extracted_date field exists and is properly populated
+
+
+TODO #3: Average Health Score Metric Integration
+--------------------------------------------------------------------------------
+Location: main_menu.py -> _build_embedded_analytics() method
+Current Status: Using placeholder value (82)
+
+Required Implementation:
+  1. Use existing RBIAnalyticsEngine to get health score
+  2. Get health score for current work OR calculate average across all works
+  3. Display score with appropriate color coding
+  
+Code Example (Option A - Current Work Score):
+  ```python
+  from UserInterface.views.analytics import RBIAnalyticsEngine
+  
+  current_work_id = self.controller.current_work.get("work_id") if self.controller.current_work else None
+  
+  if current_work_id:
+      engine = RBIAnalyticsEngine()
+      health_data = engine.get_work_health_score(db, current_work_id)
+      avg_health_score = health_data['health_score']
+  else:
+      avg_health_score = 0
+  ```
+
+Code Example (Option B - Average Across All Works):
+  ```python
+  all_works = db.query(Work).all()
+  if all_works:
+      engine = RBIAnalyticsEngine()
+      scores = []
+      for work in all_works:
+          health_data = engine.get_work_health_score(db, work.work_id)
+          scores.append(health_data['health_score'])
+      avg_health_score = sum(scores) / len(scores)
+  else:
+      avg_health_score = 0
+  ```
+
+Database Tables Involved:
+  - Equipment, Component, CorrectionLog (used by RBIAnalyticsEngine)
+
+Notes:
+  - Replace placeholder: avg_health_score = 82
+  - Decide between current work score vs average of all works
+  - Ensure RBIAnalyticsEngine import works correctly
+  - Handle exception when engine calculation fails
+
+
+================================================================================
+PRIORITY: MEDIUM - DATA VALIDATION & ERROR HANDLING
+================================================================================
+
+TODO #4: Add Error Handling for Database Queries
+--------------------------------------------------------------------------------
+Location: main_menu.py -> _build_embedded_analytics() method
+
+Required Implementation:
+  1. Wrap all database queries in try-except blocks
+  2. Display user-friendly error messages when queries fail
+  3. Log errors for debugging
+  4. Show fallback UI when data unavailable
+  
+Code Example:
+  ```python
+  try:
+      # Database queries here
+      work_completion = calculate_work_completion(db)
+      equipment_extracted, total_equipment = get_equipment_stats(db, current_work_id)
+      avg_health_score = get_health_score(db, current_work_id)
+  except Exception as e:
+      print(f"Error loading analytics data: {e}")
+      # Show error message in UI
+      error_label = ctk.CTkLabel(
+          analytics_section,
+          text="Unable to load analytics data. Please try again.",
+          font=("Segoe UI", 10),
+          text_color=("gray50", "gray70"),
+      )
+      error_label.grid(row=2, column=0, sticky="w", padx=18, pady=(0, 18))
+      return
+  finally:
+      db.close()
+  ```
+
+Notes:
+  - Prevent UI crashes when database is unavailable
+  - Provide meaningful error messages to users
+  - Consider implementing retry logic
+
+
+TODO #5: Handle "No Work Selected" Scenario
+--------------------------------------------------------------------------------
+Location: main_menu.py -> _build_embedded_analytics() method
+
+Required Implementation:
+  1. Check if current_work is None or empty
+  2. Display appropriate message when no work is selected
+  3. Consider showing global statistics instead of work-specific data
+  
+Code Example:
+  ```python
+  current_work_id = self.controller.current_work.get("work_id") if self.controller.current_work else None
+  
+  if not current_work_id:
+      # Option A: Show message
+      no_work_label = ctk.CTkLabel(
+          analytics_section,
+          text="No work selected. Select or create a work to view analytics.",
+          font=("Segoe UI", 11),
+          text_color=("gray50", "gray70"),
+      )
+      no_work_label.grid(row=2, column=0, sticky="w", padx=18, pady=(0, 18))
+      return
+      
+      # Option B: Show global statistics
+      # Display aggregate data across all works
+  ```
+
+Notes:
+  - Decide on behavior when no work is selected
+  - Ensure consistent user experience
+  - Update subtitle text if showing global data
+
+
+================================================================================
+PRIORITY: LOW - ENHANCEMENTS & OPTIMIZATION
+================================================================================
+
+TODO #6: Align Color Thresholds with RBIAnalyticsEngine
+--------------------------------------------------------------------------------
+Location: main_menu.py -> _get_health_color() and _get_health_status() methods
+
+Current Implementation:
+  - Green (Excellent): score >= 80
+  - Orange (Good): score >= 60
+  - Red (Needs Attention): score < 60
+
+Required Verification:
+  1. Check RBIAnalyticsEngine color thresholds
+  2. Ensure consistency between overview and full analytics page
+  3. Update thresholds if needed
+  
+Reference: src/UserInterface/views/analytics.py
+  - Line ~75-85: RBIAnalyticsEngine.get_work_health_score() color logic
+  - Current: >= 85 (LOW), >= 70 (MEDIUM), >= 50 (HIGH), < 50 (CRITICAL)
+
+Action Required:
+  - Update _get_health_color() and _get_health_status() thresholds to match
+  - Consider using same status strings: "LOW - Ready", "MEDIUM - Review", "HIGH - Gaps", "CRITICAL"
+
+
+TODO #7: Implement Circular Progress Ring Visualization
+--------------------------------------------------------------------------------
+Location: main_menu.py -> _create_circular_metric() method
+Current Status: Static circular icons without progress indication
+
+Required Implementation:
+  1. Add circular progress ring around metric icons
+  2. Progress ring fills based on percentage value
+  3. Animate ring fill (optional)
+  
+Suggested Libraries:
+  - matplotlib (for static circular progress)
+  - tkinter Canvas (for custom drawing)
+  - PIL/Pillow (for image manipulation)
+  
+Code Example (Canvas approach):
+  ```python
+  import tkinter as tk
+  
+  canvas = tk.Canvas(metric_card, width=80, height=80, bg='white', highlightthickness=0)
+  canvas.grid(row=0, column=0, pady=(16, 8))
+  
+  # Draw background circle
+  canvas.create_oval(10, 10, 70, 70, outline='gray', width=3)
+  
+  # Draw progress arc (percentage-based)
+  extent = (percentage / 100) * 360
+  canvas.create_arc(10, 10, 70, 70, start=90, extent=extent, 
+                    outline='green', width=3, style='arc')
+  ```
+
+Notes:
+  - This is a nice-to-have enhancement
+  - Prioritize functional integration first
+  - Ensure performance doesn't degrade with animations
+
+
+TODO #8: Add Data Refresh Mechanism
+--------------------------------------------------------------------------------
+Location: main_menu.py -> _build_embedded_analytics() method
+
+Required Implementation:
+  1. Add refresh button or auto-refresh timer
+  2. Reload analytics data without full page reload
+  3. Show loading state during refresh
+  
+Code Example:
+  ```python
+  def _refresh_analytics(self):
+      """Refresh analytics data and update UI."""
+      # Show loading indicator
+      # Fetch fresh data from database
+      # Update UI elements with new data
+      pass
+  
+  # Add refresh button
+  refresh_btn = ctk.CTkButton(
+      analytics_section,
+      text="🔄 Refresh",
+      command=self._refresh_analytics,
+      width=100,
+      height=28,
+      font=("Segoe UI", 9),
+  )
+  refresh_btn.grid(row=0, column=1, sticky="e", padx=18, pady=14)
+  ```
+
+Notes:
+  - Consider auto-refresh every 30-60 seconds
+  - Prevent multiple simultaneous refreshes
+  - Show timestamp of last refresh
+
+
+TODO #9: Cache Analytics Data for Performance
+--------------------------------------------------------------------------------
+Location: main_menu.py -> _build_embedded_analytics() method
+
+Required Implementation:
+  1. Cache analytics data to reduce database queries
+  2. Implement cache expiration (5-10 minutes)
+  3. Force refresh on user action or data changes
+  
+Code Example:
+  ```python
+  from datetime import datetime, timedelta
+  
+  class MainMenuView:
+      def __init__(self, parent, controller):
+          self.analytics_cache = None
+          self.cache_timestamp = None
+          self.cache_duration = timedelta(minutes=5)
+      
+      def _get_analytics_data(self, force_refresh=False):
+          """Get analytics data with caching."""
+          now = datetime.now()
+          
+          if (not force_refresh and 
+              self.analytics_cache and 
+              self.cache_timestamp and 
+              now - self.cache_timestamp < self.cache_duration):
+              return self.analytics_cache
+          
+          # Fetch fresh data
+          data = self._fetch_analytics_from_db()
+          self.analytics_cache = data
+          self.cache_timestamp = now
+          return data
+  ```
+
+Notes:
+  - Balance between fresh data and performance
+  - Clear cache when user creates/modifies work
+  - Consider implementing proper cache invalidation strategy
+
+
+================================================================================
+TESTING CHECKLIST
+================================================================================
+
+Once implementation is complete, verify:
+
+[ ] Work Completion metric displays correct percentage
+[ ] Work Completion handles zero works gracefully
+[ ] Equipment Extraction shows correct extracted/total counts
+[ ] Equipment Extraction handles no work selected
+[ ] Equipment Extraction handles zero equipment
+[ ] Health Score displays correct value from RBIAnalyticsEngine
+[ ] Health Score color matches threshold (Green/Orange/Red)
+[ ] Health Score status text is appropriate
+[ ] UI handles database connection failures gracefully
+[ ] UI shows error messages when queries fail
+[ ] "View Full Analytics" button navigates to analytics page correctly
+[ ] No performance degradation (queries should be fast)
+[ ] Data refreshes when work is changed
+[ ] All database sessions are properly closed
+[ ] No memory leaks from unclosed connections
+
+
+================================================================================
+ADDITIONAL NOTES
+================================================================================
+
+1. Database Session Management:
+   - Always use try-finally blocks to ensure db.close() is called
+   - Consider using context managers: with SessionLocal() as db:
+   
+2. Performance Considerations:
+   - Keep queries simple and indexed
+   - Consider adding database indexes on frequently queried fields
+   - Profile query performance if UI feels slow
+   
+3. Future Enhancements:
+   - Add drill-down capability (click metric to see details)
+   - Export analytics data to CSV/Excel
+   - Add date range filters
+   - Show trend indicators (↑ ↓ compared to previous period)
+   - Add more metrics (correction rate, extraction time, etc.)
+
+4. Related Files to Review:
+   - src/UserInterface/views/analytics.py (Full analytics implementation)
+   - src/AutoRBI_Database/database/models/*.py (Database models)
+   - src/AutoRBI_Database/services/analytics_service.py (If exists)
+
+5. Contact Points:
+   - UI/Frontend issues: Contact UI Developer
+   - Database queries: Contact Database Administrator
+   - Business logic: Contact Product Owner
+
+================================================================================
+END OF TODO LIST
+================================================================================

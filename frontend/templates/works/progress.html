@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+
+{% block title %}Extraction Progress - {{ work.name }} - AutoRBI{% endblock %}
+
+{% block content %}
+<div class="extraction-progress-page">
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('works.list_works') }}">Works</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('works.extract_page', work_id=work.id) }}">{{ work.name }}</a></li>
+            <li class="breadcrumb-item active">Extraction Progress</li>
+        </ol>
+    </nav>
+
+    <!-- Page Header -->
+    <div class="mb-4">
+        <h2 class="fw-bold">
+            <i class="bi bi-hourglass-split"></i> Extraction in Progress
+        </h2>
+        <p class="text-muted">Extracting equipment data from PDF using AI...</p>
+    </div>
+
+    <!-- Progress Card -->
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">
+                <i class="bi bi-file-earmark-pdf"></i> Extraction #{{ extraction_id }}
+            </h5>
+        </div>
+        <div class="card-body">
+            <!-- Status -->
+            <div class="mb-4">
+                <h6>Status</h6>
+                <div class="d-flex align-items-center">
+                    <div id="statusBadge" class="badge bg-primary fs-6">
+                        <span class="spinner-border spinner-border-sm me-2"></span>
+                        <span id="statusText">{{ extraction.status|default('pending')|upper }}</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Progress Bar -->
+            <div class="mb-4">
+                <h6>Progress</h6>
+                <div class="progress" style="height: 30px;">
+                    <div 
+                        id="progressBar" 
+                        class="progress-bar progress-bar-striped progress-bar-animated" 
+                        role="progressbar" 
+                        style="width: 0%;"
+                        aria-valuenow="0" 
+                        aria-valuemin="0" 
+                        aria-valuemax="100">
+                        <span id="progressText">0%</span>
+                    </div>
+                </div>
+                <div class="mt-2 text-muted small">
+                    <span id="pagesProcessed">0</span> of <span id="totalPages">0</span> pages processed
+                </div>
+            </div>
+
+            <!-- Details -->
+            <div id="detailsSection" class="mb-4 d-none">
+                <h6>Details</h6>
+                <ul id="detailsList" class="list-unstyled mb-0">
+                    <!-- Populated dynamically -->
+                </ul>
+            </div>
+
+            <!-- Error Message -->
+            <div id="errorSection" class="alert alert-danger d-none">
+                <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                <span id="errorText"></span>
+            </div>
+
+            <!-- Success Message -->
+            <div id="successSection" class="alert alert-success d-none">
+                <i class="bi bi-check-circle-fill me-2"></i>
+                Extraction completed successfully! <span id="equipmentCount">0</span> equipment items extracted.
+            </div>
+
+            <!-- Actions -->
+            <div class="mt-4">
+                <a href="{{ url_for('works.extract_page', work_id=work.id) }}" class="btn btn-primary" id="backBtn">
+                    <i class="bi bi-arrow-left"></i> Back to Extraction
+                </a>
+                <a href="{{ url_for('works.list_works') }}" class="btn btn-outline-secondary">
+                    <i class="bi bi-list"></i> View All Works
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const extractionId = {{ extraction_id }};
+const workId = {{ work.id }};
+let pollInterval;
+let wsConnection;
+
+// Status badge colors
+const statusColors = {
+    'pending': 'bg-secondary',
+    'in_progress': 'bg-primary',
+    'completed': 'bg-success',
+    'failed': 'bg-danger'
+};
+
+// Poll for extraction status
+function pollStatus() {
+    fetch(`{{ url_for('works.get_extraction_status_api', extraction_id=extraction_id) }}`)
+    .then(response => response.json())
+    .then(data => {
+        updateProgress(data);
+    })
+    .catch(error => {
+        console.error('Error polling status:', error);
+    });
+}
+
+// Update progress UI
+function updateProgress(data) {
+    const status = data.status.toLowerCase();
+    const totalPages = data.total_pages || 0;
+    const processedPages = data.processed_pages || 0;
+    const percentage = totalPages > 0 ? Math.round((processedPages / totalPages) * 100) : 0;
+    
+    // Update status badge
+    document.getElementById('statusText').textContent = status.toUpperCase();
+    const statusBadge = document.getElementById('statusBadge');
+    statusBadge.className = 'badge fs-6 ' + (statusColors[status] || 'bg-secondary');
+    
+    // Update progress bar
+    document.getElementById('progressBar').style.width = percentage + '%';
+    document.getElementById('progressBar').setAttribute('aria-valuenow', percentage);
+    document.getElementById('progressText').textContent = percentage + '%';
+    document.getElementById('pagesProcessed').textContent = processedPages;
+    document.getElementById('totalPages').textContent = totalPages;
+    
+    // Handle completion
+    if (status === 'completed') {
+        clearInterval(pollInterval);
+        document.getElementById('statusBadge').innerHTML = '<i class="bi bi-check-circle-fill me-2"></i> COMPLETED';
+        document.getElementById('progressBar').classList.remove('progress-bar-animated');
+        document.getElementById('successSection').classList.remove('d-none');
+        document.getElementById('equipmentCount').textContent = data.equipment_count || 0;
+        
+        // Update back button to view results
+        const backBtn = document.getElementById('backBtn');
+        backBtn.innerHTML = '<i class="bi bi-eye"></i> View Extracted Equipment';
+        
+        // Auto-redirect after 2 seconds if equipment was extracted
+        if (data.equipment_count > 0) {
+            setTimeout(() => {
+                window.location.href = backBtn.href;
+            }, 2000);
+        }
+    }
+    
+    // Handle failure
+    if (status === 'failed') {
+        clearInterval(pollInterval);
+        document.getElementById('statusBadge').innerHTML = '<i class="bi bi-x-circle-fill me-2"></i> FAILED';
+        document.getElementById('progressBar').classList.remove('progress-bar-animated');
+        document.getElementById('progressBar').classList.add('bg-danger');
+        document.getElementById('errorSection').classList.remove('d-none');
+        document.getElementById('errorText').textContent = data.error_message || 'Unknown error occurred';
+    }
+}
+
+// Start polling when page loads
+document.addEventListener('DOMContentLoaded', function() {
+    // Initial poll
+    pollStatus();
+    
+    // Poll every 2 seconds
+    pollInterval = setInterval(pollStatus, 2000);
+});
+
+// Cleanup on page unload
+window.addEventListener('beforeunload', function() {
+    if (pollInterval) {
+        clearInterval(pollInterval);
+    }
+    if (wsConnection) {
+        wsConnection.close();
+    }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+
+{% block title %}Analytics - AutoRBI{% endblock %}
+
+{% block content %}
+<div class="analytics-page">
+    <!-- Page Header -->
+    <div class="mb-4">
+        <h2 class="fw-bold">
+            <i class="bi bi-graph-up"></i> Analytics Dashboard
+        </h2>
+        <p class="text-muted">View insights and metrics for your work projects</p>
+    </div>
+
+    <!-- Works List -->
+    <div class="row g-4">
+        {% if works %}
+            {% for work in works %}
+            <div class="col-md-6">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start mb-3">
+                            <h5 class="card-title mb-0">
+                                <i class="bi bi-folder"></i> {{ work.name }}
+                            </h5>
+                            <span class="badge bg-{{ get_status_badge_class(work.status) }}">
+                                {{ work.status|capitalize }}
+                            </span>
+                        </div>
+                        <p class="card-text text-muted">
+                            {{ work.description[:100] }}{% if work.description and work.description|length > 100 %}...{% endif %}
+                        </p>
+                        <div class="d-grid gap-2">
+                            <a href="{{ url_for('analytics.view_analytics', work_id=work.id) }}" 
+                               class="btn btn-primary">
+                                <i class="bi bi-graph-up"></i> View Analytics
+                            </a>
+                        </div>
+                    </div>
+                    <div class="card-footer bg-white text-muted">
+                        <small>
+                            <i class="bi bi-calendar"></i> Created: {{ work.created_at|datetime }}
+                        </small>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+            <div class="col-12">
+                <div class="text-center py-5">
+                    <i class="bi bi-inbox text-muted" style="font-size: 4rem;"></i>
+                    <p class="text-muted mt-3 mb-4">No works found. Create a work project first!</p>
+                    <a href="{{ url_for('works.list_works') }}" class="btn btn-primary">
+                        <i class="bi bi-plus-circle"></i> Create Work
+                    </a>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

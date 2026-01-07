@@ -1,0 +1,944 @@
+================================================================================
+AUTORBI BACKEND INTEGRATION GUIDE
+================================================================================
+
+This document provides detailed instructions for backend developers to integrate
+their code with the redesigned CustomTkinter UI. All placeholders and integration
+points are clearly marked.
+
+================================================================================
+FILE STRUCTURE
+================================================================================
+
+Main Application:
+- src/app.py                    (Main window - no changes needed)
+- src/main.py                   (Entry point - no changes needed)
+
+Views (UI Layer):
+- src/UserInterface/views/login.py
+- src/UserInterface/views/registration.py
+- src/UserInterface/views/main_menu.py
+- src/UserInterface/views/new_work.py
+- src/UserInterface/views/report_menu.py
+- src/UserInterface/views/work_history.py
+- src/UserInterface/views/analytics.py
+- src/UserInterface/views/settings.py (NEW)
+- src/UserInterface/views/profile.py (NEW)
+
+Components (UI Components):
+- src/UserInterface/components/notification_system.py (NEW)
+- src/UserInterface/components/loading_states.py (NEW)
+
+================================================================================
+1. LOGIN VIEW (login.py)
+================================================================================
+
+FILE: src/UserInterface/views/login.py
+
+CURRENT STATE:
+- UI is complete and functional
+- Login button calls handle_login() function
+- Currently bypasses authentication (line 108-111)
+
+INTEGRATION POINT:
+Location: Line 99-111 (handle_login function)
+
+TODO:
+1. Replace the TODO comment (line 107) with actual authentication call
+2. Uncomment and implement the authentication logic
+
+EXAMPLE:
+    def handle_login() -> None:
+        username = username_entry.get().strip()
+        password = password_entry.get().strip()
+        if not username or not password:
+            messagebox.showwarning(...)
+            return
+        
+        # REPLACE THIS SECTION:
+        # TODO: Integrate with backend authentication
+        # if backend.authenticate(username, password):
+        #     self.controller.show_main_menu()
+        # else:
+        #     messagebox.showerror("Login Failed", "Invalid username or password.")
+        
+        # WITH:
+        if self.controller.authenticate_user(username, password):
+            self.controller.show_main_menu()
+        else:
+            messagebox.showerror("Login Failed", "Invalid username or password.")
+
+BACKEND METHOD NEEDED:
+- controller.authenticate_user(username: str, password: str) -> bool
+
+================================================================================
+2. REGISTRATION VIEW (registration.py)
+================================================================================
+
+FILE: src/UserInterface/views/registration.py
+
+CURRENT STATE:
+- UI is complete and functional
+- Registration button calls handle_register() function
+- Currently bypasses backend (line 92-97)
+
+INTEGRATION POINT:
+Location: Line 74-97 (handle_register function)
+
+TODO:
+1. Replace the TODO comment (line 92) with actual registration call
+2. Uncomment and implement the registration logic
+
+EXAMPLE:
+    def handle_register() -> None:
+        # ... validation code ...
+        
+        # REPLACE THIS SECTION:
+        # TODO: Integrate with backend registration
+        # if backend.register(fullname, username, password):
+        #     messagebox.showinfo("Success", "Registration successful!")
+        #     self.controller.show_login()
+        # else:
+        #     messagebox.showerror("Registration Failed", "Username already exists.")
+        
+        # WITH:
+        if self.controller.register_user(fullname, username, password):
+            messagebox.showinfo("Success", "Registration successful!")
+            self.controller.show_login()
+        else:
+            messagebox.showerror("Registration Failed", "Username already exists.")
+
+BACKEND METHOD NEEDED:
+- controller.register_user(fullname: str, username: str, password: str) -> bool
+
+================================================================================
+3. NEW WORK VIEW (new_work.py)
+================================================================================
+
+FILE: src/UserInterface/views/new_work.py
+
+CURRENT STATE:
+- Complete UI with file selection, progress bar, and editable fields
+- Helper methods ready for backend integration
+
+INTEGRATION POINTS:
+
+A. Start Extraction (Line 141-147)
+   Location: _start_extraction() method
+   
+   TODO:
+   - Replace TODO comment with actual extraction call
+   - Pass selected files and view reference to backend
+   
+   EXAMPLE:
+       def _start_extraction(self) -> None:
+           if not self.selected_files:
+               messagebox.showwarning("No Files", "Please select files first.")
+               return
+           
+           # REPLACE:
+           # TODO: Call backend extraction + Excel/DB update here.
+           # self.controller.start_extraction(self.selected_files, self)
+           
+           # WITH:
+           self.controller.start_extraction(self.selected_files, self)
+   
+   BACKEND METHOD NEEDED:
+   - controller.start_extraction(files: List[str], view: NewWorkView) -> None
+   
+   BACKEND SHOULD CALL VIEW METHODS:
+   - view.set_progress(value: float, text: Optional[str])  # Update progress (0.0-1.0)
+   - view.set_extracted_text_for_file(file_path: str, content: str)  # Set data per file
+
+B. Save to Excel (Line 149-165)
+   Location: _save_to_excel() method
+   
+   TODO:
+   - Replace TODO comment with actual save call
+   - Pass edited data dictionary to backend
+   
+   EXAMPLE:
+       def _save_to_excel(self) -> None:
+           # ... collect edited_data ...
+           
+           # REPLACE:
+           # TODO: delegate to controller/backend
+           # self.controller.save_edited_data_to_excel(edited_data)
+           
+           # WITH:
+           self.controller.save_edited_data_to_excel(edited_data)
+   
+   BACKEND METHOD NEEDED:
+   - controller.save_edited_data_to_excel(edited_data: Dict[str, List[str]]) -> None
+   
+   DATA FORMAT:
+   - edited_data: Dict[str, List[str]]
+   - Key: file path (str)
+   - Value: list of extracted/edited text lines (List[str])
+
+HELPER METHODS AVAILABLE (Backend can call these):
+- set_progress(value: float, text: Optional[str]) -> None
+  Updates the progress bar (0.0 to 1.0) and status text
+  
+- set_extracted_text_for_file(file_path: str, content: str) -> None
+  Populates the editable field for a specific file
+  
+- set_extracted_text(content: str) -> None
+  Populates all file fields with the same content (simple case)
+
+================================================================================
+4. REPORT MENU VIEW (report_menu.py)
+================================================================================
+
+FILE: src/UserInterface/views/report_menu.py
+
+CURRENT STATE:
+- Complete table UI with PDF preview popup
+- Action buttons ready for backend integration
+
+INTEGRATION POINTS:
+
+A. Load Reports (Line 18-31)
+   Location: load_reports() method
+   
+   USAGE:
+   - Backend should call this method to populate the table
+   - Pass list of report dictionaries
+   
+   EXAMPLE:
+       # In your backend/controller:
+       reports = [
+           {
+               "name": "Report_2025_01_15.xlsx",
+               "created_at": "15 Jan 2025",
+               "excel_path": "/path/to/report.xlsx",
+               "id": "report_123"
+           },
+           # ... more reports
+       ]
+       report_view.load_reports(reports)
+   
+   DATA FORMAT:
+   - reports: List[Dict[str, Any]]
+   - Each dict should have: "name", "created_at", "excel_path", "id"
+
+B. PDF Preview (Line 33-78)
+   Location: _open_pdf_preview() method
+   
+   TODO:
+   - Currently shows placeholder text
+   - Backend should render actual PDF preview in popup
+   - Replace preview_area content (line 49-57)
+   
+   EXAMPLE:
+       # In _open_pdf_preview method, replace:
+       preview_area = ctk.CTkLabel(...)
+       
+       # WITH actual PDF rendering:
+       # Option 1: Convert PDF pages to images and display
+       # Option 2: Use embedded PDF viewer
+       # Option 3: Show first page as image
+       pdf_image = self.controller.get_pdf_preview_image(report)
+       preview_area = ctk.CTkLabel(popup, image=pdf_image, text="")
+
+C. Export PDF (Line 80-83)
+   Location: _export_pdf() method
+   
+   TODO:
+   - Replace TODO with actual PDF generation
+   
+   EXAMPLE:
+       def _export_pdf(self, report: Dict[str, Any]) -> None:
+           # REPLACE:
+           # TODO: delegate to controller/backend
+           
+           # WITH:
+           self.controller.generate_pdf(report)
+   
+   BACKEND METHOD NEEDED:
+   - controller.generate_pdf(report: Dict[str, Any]) -> None
+
+D. Export Excel (Line 90-93)
+   Location: _export_excel() method
+   
+   TODO:
+   - Replace TODO with actual Excel export/open
+   
+   EXAMPLE:
+       def _export_excel(self, report: Dict[str, Any]) -> None:
+           # REPLACE:
+           # TODO: delegate to controller/backend
+           
+           # WITH:
+           self.controller.open_excel_file(report)
+   
+   BACKEND METHOD NEEDED:
+   - controller.open_excel_file(report: Dict[str, Any]) -> None
+
+E. Export PPT (Line 85-88)
+   Location: _export_ppt() method
+   
+   TODO:
+   - Replace TODO with actual PowerPoint generation
+   
+   EXAMPLE:
+       def _export_ppt(self, report: Dict[str, Any]) -> None:
+           # REPLACE:
+           # TODO: delegate to controller/backend
+           
+           # WITH:
+           self.controller.generate_ppt(report)
+   
+   BACKEND METHOD NEEDED:
+   - controller.generate_ppt(report: Dict[str, Any]) -> None
+
+================================================================================
+5. WORK HISTORY VIEW (work_history.py)
+================================================================================
+
+FILE: src/UserInterface/views/work_history.py
+
+CURRENT STATE:
+- Complete table UI with filters
+- Action buttons ready for backend integration
+
+INTEGRATION POINTS:
+
+A. Load History (Line 17-31)
+   Location: load_history() method
+   
+   USAGE:
+   - Backend should call this method to populate the table
+   - Pass list of history item dictionaries
+   
+   EXAMPLE:
+       # In your backend/controller:
+       history_items = [
+           {
+               "id": "work_001",
+               "file_name": "GA_Drawing_001.pdf",
+               "created_at": "15 Jan 2025 10:30 AM",
+               "status": "Completed",
+               "files_count": 3
+           },
+           # ... more items
+       ]
+       work_history_view.load_history(history_items)
+   
+   DATA FORMAT:
+   - history_items: List[Dict[str, Any]]
+   - Each dict should have: "id", "file_name", "created_at", "status", "files_count"
+   - Status values: "Completed", "In Progress", "Failed"
+
+B. View Details (Line 50-53)
+   Location: _view_details() method
+   
+   TODO:
+   - Replace TODO with actual details view
+   
+   EXAMPLE:
+       def _view_details(self, item: Dict[str, Any]) -> None:
+           # REPLACE:
+           # TODO: delegate to controller/backend
+           
+           # WITH:
+           self.controller.show_work_details(item)
+   
+   BACKEND METHOD NEEDED:
+   - controller.show_work_details(item: Dict[str, Any]) -> None
+
+C. Export Work (Line 55-58)
+   Location: _export_work() method
+   
+   TODO:
+   - Replace TODO with actual export
+   
+   EXAMPLE:
+       def _export_work(self, item: Dict[str, Any]) -> None:
+           # REPLACE:
+           # TODO: delegate to controller/backend
+           
+           # WITH:
+           self.controller.export_work_item(item)
+   
+   BACKEND METHOD NEEDED:
+   - controller.export_work_item(item: Dict[str, Any]) -> None
+
+D. Delete Work (Line 60-63)
+   Location: _delete_work() method
+   
+   TODO:
+   - Replace TODO with actual delete
+   - Add confirmation dialog if needed
+   
+   EXAMPLE:
+       def _delete_work(self, item: Dict[str, Any]) -> None:
+           # REPLACE:
+           # TODO: delegate to controller/backend
+           
+           # WITH:
+           if messagebox.askyesno("Confirm", "Delete this work item?"):
+               self.controller.delete_work_item(item)
+               # Refresh the table
+               self.load_history(self.controller.get_all_work_history())
+   
+   BACKEND METHOD NEEDED:
+   - controller.delete_work_item(item: Dict[str, Any]) -> None
+
+E. Filter Implementation (Line 33-38)
+   Location: _filter_items() method
+   
+   TODO:
+   - Currently returns all items for "all" filter
+   - Implement date-based filtering for other periods
+   
+   EXAMPLE:
+       def _filter_items(self, items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+           if self.current_filter == "all":
+               return items
+           elif self.current_filter == "today":
+               today = datetime.now().date()
+               return [item for item in items 
+                       if self._parse_date(item.get("created_at")) == today]
+           # ... implement other filters
+   
+   NOTE: Backend can also pre-filter data before calling load_history()
+
+================================================================================
+6. ANALYTICS DASHBOARD VIEW (analytics.py)
+================================================================================
+
+FILE: src/UserInterface/views/analytics.py
+
+CURRENT STATE:
+- Complete UI with KPI cards and chart placeholders
+- Period selector buttons ready
+
+INTEGRATION POINTS:
+
+A. Update Metrics (Line 16-34)
+   Location: update_metrics() method
+   
+   USAGE:
+   - Backend should call this method to update KPI cards
+   - Pass metrics dictionary
+   
+   EXAMPLE:
+       # In your backend/controller:
+       metrics = {
+           "total_works": 150,
+           "success_rate": 95.5,
+           "avg_time": 45.2,
+           "total_files": 320
+       }
+       analytics_view.update_metrics(metrics)
+   
+   DATA FORMAT:
+   - metrics: Dict[str, Any]
+   - Keys: "total_works" (int), "success_rate" (float), "avg_time" (float), 
+           "total_files" (int)
+
+B. Change Period (Line 36-40)
+   Location: _change_period() method
+   
+   TODO:
+   - Replace TODO with actual data reload
+   
+   EXAMPLE:
+       def _change_period(self, period: str) -> None:
+           self.current_period = period
+           # REPLACE:
+           # TODO: Reload analytics data for selected period
+           
+           # WITH:
+           metrics = self.controller.get_analytics_data(period)
+           self.update_metrics(metrics)
+           # Also update charts if implemented
+   
+   BACKEND METHOD NEEDED:
+   - controller.get_analytics_data(period: str) -> Dict[str, Any]
+
+C. Chart Rendering (Line 200-234)
+   Location: Chart placeholder areas
+   
+   TODO:
+   - Replace chart placeholders with actual charts
+   - Use matplotlib or other charting library
+   - Convert charts to images and display in CTkLabel
+   
+   EXAMPLE:
+       # In show() method, replace chart placeholders:
+       import matplotlib.pyplot as plt
+       from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+       
+       # Create chart
+       fig, ax = plt.subplots(figsize=(6, 4))
+       # ... plot data ...
+       
+       # Convert to image and display
+       chart_image = self._figure_to_ctk_image(fig)
+       chart_label = ctk.CTkLabel(chart1_card, image=chart_image, text="")
+       chart_label.grid(...)
+
+================================================================================
+7. MAIN MENU VIEW (main_menu.py)
+================================================================================
+
+FILE: src/UserInterface/views/main_menu.py
+
+CURRENT STATE:
+- Complete UI with search bar, profile dropdown, and menu cards
+- Search functionality ready for backend integration
+- Profile dropdown with navigation to Settings and Profile pages
+
+INTEGRATION POINTS:
+
+A. Search Functionality (Line ~98)
+   Location: _handle_search() method
+   
+   TODO:
+   - Currently shows placeholder search results
+   - Backend should implement actual search across work history, reports, equipment
+   
+   EXAMPLE:
+       def _handle_search(self, query: str) -> None:
+           if not query or len(query) < 2:
+               return
+           
+           # REPLACE placeholder results with:
+           results = self.controller.search_all(query)
+           self._show_search_results(query, results)
+   
+   BACKEND METHOD NEEDED:
+   - controller.search_all(query: str) -> List[Dict[str, Any]]
+   - Should search across: work history, reports, equipment database
+   - Return format: [{"text": str, "category": str, "action": callable}, ...]
+
+B. User Profile Data
+   Location: Profile section (Line ~115-130)
+   
+   TODO:
+   - Currently shows hardcoded "John Doe"
+   - Backend should provide current user information
+   
+   EXAMPLE:
+       # In show() method, replace:
+       username_label = ctk.CTkLabel(..., text="John Doe")
+       
+       # WITH:
+       current_user = self.controller.get_current_user()
+       username_label = ctk.CTkLabel(..., text=current_user.get("full_name", "User"))
+   
+   BACKEND METHOD NEEDED:
+   - controller.get_current_user() -> Dict[str, Any]
+   - Should return: {"username": str, "full_name": str, "role": str, "email": str}
+
+================================================================================
+8. SETTINGS VIEW (settings.py) - NEW
+================================================================================
+
+FILE: src/UserInterface/views/settings.py
+
+CURRENT STATE:
+- Complete UI with theme selection and notification toggles
+- Save button ready for backend integration
+
+INTEGRATION POINTS:
+
+A. Save Settings (Line ~save_btn)
+   Location: Save button command
+   
+   TODO:
+   - Currently shows success message
+   - Backend should save user preferences
+   
+   EXAMPLE:
+       def save_settings(self, settings: Dict[str, Any]) -> None:
+           # Save theme preference, notification settings, etc.
+           self.controller.save_user_settings(settings)
+   
+   BACKEND METHOD NEEDED:
+   - controller.save_user_settings(settings: Dict[str, Any]) -> bool
+
+================================================================================
+9. PROFILE VIEW (profile.py) - NEW
+================================================================================
+
+FILE: src/UserInterface/views/profile.py
+
+CURRENT STATE:
+- Complete UI with profile information display
+- Edit button ready for backend integration
+
+INTEGRATION POINTS:
+
+A. Load User Data (Line ~username_label, role_label, etc.)
+   Location: Profile information display
+   
+   TODO:
+   - Currently shows hardcoded user data
+   - Backend should provide actual user information
+   
+   EXAMPLE:
+       # In show() method:
+       user_data = self.controller.get_current_user()
+       username_label.configure(text=user_data.get("full_name", "User"))
+       role_label.configure(text=user_data.get("role", "Engineer"))
+   
+   BACKEND METHOD NEEDED:
+   - controller.get_current_user() -> Dict[str, Any]
+
+B. Edit Profile (Line ~edit_btn)
+   Location: Edit Profile button
+   
+   TODO:
+   - Currently shows info message
+   - Backend should handle profile editing
+   
+   EXAMPLE:
+       def edit_profile(self, user_data: Dict[str, Any]) -> None:
+           self.controller.update_user_profile(user_data)
+   
+   BACKEND METHOD NEEDED:
+   - controller.update_user_profile(user_data: Dict[str, Any]) -> bool
+
+================================================================================
+10. NOTIFICATION SYSTEM - NEW
+================================================================================
+
+COMPONENT: src/UserInterface/components/notification_system.py
+
+CURRENT STATE:
+- Fully functional notification system
+- Integrated into app controller
+
+USAGE:
+- Any view/controller can show notifications using:
+  self.controller.show_notification(message, type, duration)
+
+EXAMPLE:
+    # Show success notification
+    self.controller.show_notification(
+        "Extraction completed successfully!",
+        "success",
+        5000
+    )
+    
+    # Show error notification
+    self.controller.show_notification(
+        "Failed to save data",
+        "error",
+        7000
+    )
+
+NOTIFICATION TYPES:
+- "success" - Green notification with checkmark
+- "error" - Red notification with X
+- "warning" - Orange notification with warning icon
+- "info" - Blue notification with info icon
+
+================================================================================
+11. LOADING STATES - NEW
+================================================================================
+
+COMPONENT: src/UserInterface/components/loading_states.py
+
+CURRENT STATE:
+- Fully functional loading overlay system
+- Integrated into app controller
+
+USAGE:
+- Show loading overlay:
+  self.controller.show_loading("Processing...", show_progress=True)
+  
+- Update progress (0.0 to 1.0):
+  self.controller.update_loading_progress(0.5, "Halfway done...")
+  
+- Hide loading:
+  self.controller.hide_loading()
+
+EXAMPLE:
+    # In extraction process:
+    self.controller.show_loading("Starting extraction...", show_progress=True)
+    
+    for i, file in enumerate(files):
+        progress = (i + 1) / len(files)
+        self.controller.update_loading_progress(
+            progress,
+            f"Processing {i+1}/{len(files)}: {file}"
+        )
+    
+    self.controller.hide_loading()
+    self.controller.show_notification("Extraction complete!", "success")
+
+================================================================================
+CONTROLLER PATTERN
+================================================================================
+
+The UI uses a controller pattern. The controller is passed to each view in the
+__init__ method. Backend methods should be added to the controller (AutoRBIApp
+class in src/app.py).
+
+EXAMPLE CONTROLLER METHODS TO ADD:
+
+class AutoRBIApp(ctk.CTk):
+    def __init__(self):
+        # ... existing code ...
+    
+    # Authentication
+    def authenticate_user(self, username: str, password: str) -> bool:
+        # Your authentication logic here
+        pass
+    
+    def register_user(self, fullname: str, username: str, password: str) -> bool:
+        # Your registration logic here
+        pass
+    
+    # New Work
+    def start_extraction(self, files: List[str], view: NewWorkView) -> None:
+        # Your extraction logic here
+        # Call view.set_progress() to update progress
+        # Call view.set_extracted_text_for_file() to populate data
+        pass
+    
+    def save_edited_data_to_excel(self, edited_data: Dict[str, List[str]]) -> None:
+        # Your save logic here
+        # Write to Excel and database
+        pass
+    
+    # Reports
+    def generate_pdf(self, report: Dict[str, Any]) -> None:
+        # Your PDF generation logic here
+        pass
+    
+    def generate_ppt(self, report: Dict[str, Any]) -> None:
+        # Your PPT generation logic here
+        pass
+    
+    def open_excel_file(self, report: Dict[str, Any]) -> None:
+        # Your Excel open/export logic here
+        pass
+    
+    # Work History
+    def show_work_details(self, item: Dict[str, Any]) -> None:
+        # Your details view logic here
+        pass
+    
+    def export_work_item(self, item: Dict[str, Any]) -> None:
+        # Your export logic here
+        pass
+    
+    def delete_work_item(self, item: Dict[str, Any]) -> None:
+        # Your delete logic here
+        pass
+    
+    def get_all_work_history(self) -> List[Dict[str, Any]]:
+        # Return list of work history items
+        pass
+    
+    # Analytics
+    def get_analytics_data(self, period: str) -> Dict[str, Any]:
+        # Return metrics dictionary
+        pass
+    
+    # Main Menu / Search
+    def search_all(self, query: str) -> List[Dict[str, Any]]:
+        # Search across work history, reports, equipment
+        # Return: [{"text": str, "category": str, "action": callable}, ...]
+        pass
+    
+    def get_current_user(self) -> Dict[str, Any]:
+        # Return current user information
+        # {"username": str, "full_name": str, "role": str, "email": str}
+        pass
+    
+    # Settings
+    def save_user_settings(self, settings: Dict[str, Any]) -> bool:
+        # Save user preferences (theme, notifications, etc.)
+        pass
+    
+    # Profile
+    def update_user_profile(self, user_data: Dict[str, Any]) -> bool:
+        # Update user profile information
+        pass
+    
+    # Notifications (Already implemented in app.py)
+    def show_notification(self, message: str, notification_type: str = "info", duration: int = 5000) -> None:
+        # Already implemented - no backend needed
+    
+    # Loading States (Already implemented in app.py)
+    def show_loading(self, message: str = "Loading...", show_progress: bool = False) -> None:
+        # Already implemented - no backend needed
+    
+    def hide_loading(self) -> None:
+        # Already implemented - no backend needed
+    
+    def update_loading_progress(self, value: float, message: str = None) -> None:
+        # Already implemented - no backend needed
+
+================================================================================
+DATA FORMATS SUMMARY
+================================================================================
+
+Report Dictionary:
+{
+    "name": str,           # Report file name
+    "created_at": str,     # Date string
+    "excel_path": str,     # Full path to Excel file
+    "id": Any             # Unique identifier
+}
+
+Work History Item Dictionary:
+{
+    "id": str,            # Unique identifier
+    "file_name": str,     # Name of the work/file
+    "created_at": str,    # Date/time string
+    "status": str,        # "Completed", "In Progress", or "Failed"
+    "files_count": int    # Number of files processed
+}
+
+Metrics Dictionary:
+{
+    "total_works": int,      # Total number of works
+    "success_rate": float,   # Success percentage
+    "avg_time": float,       # Average processing time
+    "total_files": int       # Total files processed
+}
+
+Edited Data Dictionary:
+{
+    file_path: [line1, line2, ...]  # File path -> list of text lines
+}
+
+================================================================================
+TODO COMMENTS STANDARDIZATION
+================================================================================
+
+All TODO comments in the UserInterface folder have been standardized to a
+consistent format for easy identification:
+
+FORMAT: # TODO: Backend - [description of required implementation]
+
+This format makes it easy for backend developers to:
+1. Search for all TODOs using grep/find
+2. Understand what needs to be implemented
+3. See the scope of required backend work at a glance
+
+BENEFITS:
+- Consistent naming convention across all views
+- Easy to identify backend integration points
+- Clear distinction between UI code and backend placeholders
+- Facilitates code reviews and task assignment
+
+================================================================================
+QUICK REFERENCE: TODO LOCATIONS AND FORMATS
+================================================================================
+
+login.py:
+  # TODO: Backend - Authenticate user credentials against database
+  # TODO: Backend - Validate username and password
+  # TODO: Backend - Load user session and profile data
+  # TODO: Backend - Return success/error status
+
+registration.py:
+  # TODO: Backend - Integrate with backend registration and user creation
+
+new_work.py (EXTRACTION FLOW):
+  # TODO: Backend - Call extraction service with self.selected_files
+  # TODO: Backend - Call append_extraction_log() to send live status updates
+  # TODO: Backend - Call set_extracted_equipment_data() to populate table
+  # TODO: Backend - Call set_progress() to update progress bar
+  # TODO: Backend - Call extraction service and save results to Excel/database
+  # TODO: Backend - Retrieve edited data from self.file_to_textboxes
+  # TODO: Backend - Validate edited data against masterfile schema
+  # TODO: Backend - Update Excel file with edited equipment data
+  # TODO: Backend - Save to database
+  # TODO: Backend - Return status: success/error for notification
+  # TODO: Backend - Delegate to controller/backend for file validation
+  # TODO: Backend - Validate Excel file format (check sheets, columns)
+  # TODO: Backend - Verify Excel contains valid masterfile structure
+  # TODO: Backend - Load and cache equipment data for later use
+
+report_menu.py:
+  # TODO: Backend - Load PDF file from storage
+  # TODO: Backend - Convert PDF pages to images for preview
+  # TODO: Backend - Stream images to UI for display
+  # TODO: Backend - Generate PDF from report data
+  # TODO: Backend - Include equipment, components, extracted data
+  # TODO: Backend - Return PDF file path for download
+  # TODO: Backend - Delegate to controller/backend for PDF export
+  # TODO: Backend - Delegate to controller/backend for PowerPoint export
+  # TODO: Backend - Delegate to controller/backend for Excel export
+
+work_history.py:
+  # TODO: Backend - Implement date-based filtering when backend provides data
+  # TODO: Backend - Delegate to controller/backend for details loading
+  # TODO: Backend - Generate Excel file with work item data
+  # TODO: Backend - Generate PDF report with work item details
+  # TODO: Backend - Return file path for download
+  # TODO: Backend - Delegate to controller/backend for export processing
+  # TODO: Backend - Delegate to controller/backend for work item deletion
+
+analytics.py:
+  # TODO: Backend - Query analytics database for metrics
+  # TODO: Backend - Calculate KPIs: total works, success rate, avg time
+  # TODO: Backend - Aggregate equipment and component statistics
+  # TODO: Backend - Support time period filtering (daily, weekly, monthly)
+  # TODO: Backend - Query analytics for selected time period
+  # TODO: Backend - Calculate metrics for the period
+  # TODO: Backend - Return updated KPI values
+
+settings.py:
+  # TODO: Backend - Load user preferences from database
+  # TODO: Backend - Load theme, language, notification settings
+  # TODO: Backend - Return saved user settings
+  # TODO: Backend - Save theme preference to database
+  # TODO: Backend - Apply theme to all UI components
+  # TODO: Backend - Return confirmation of theme change
+
+profile.py:
+  # TODO: Backend - Load user profile data from database
+  # TODO: Backend - Fetch user statistics (extractions, reports generated)
+  # TODO: Backend - Load profile picture/avatar
+  # TODO: Backend - Get from backend (username display)
+  # TODO: Backend - Get from backend (role display)
+
+main_menu.py:
+  # TODO: Backend - Get from backend (username display)
+  # TODO: Backend - Get actual search results from backend
+
+loading_states.py:
+  # TODO: Backend - Can optionally enable overlay for long-running operations
+  # TODO: Backend - Send progress updates via update_progress() method
+
+================================================================================
+TESTING CHECKLIST
+================================================================================
+
+After integrating backend code, test:
+
+[ ] Login with valid/invalid credentials
+[ ] Registration with new/existing username
+[ ] File selection in New Work
+[ ] Extraction progress updates
+[ ] Extracted data display per file
+[ ] Save edited data to Excel/DB
+[ ] Report table population
+[ ] PDF preview popup
+[ ] PDF/Excel/PPT export
+[ ] Work history table population
+[ ] Work history filters
+[ ] View/Export/Delete work items
+[ ] Analytics metrics update
+[ ] Period selector functionality
+[ ] Chart rendering (if implemented)
+[ ] Search functionality across all data
+[ ] User profile display and editing
+[ ] Settings save and load
+[ ] Notification system (already functional)
+[ ] Loading states (already functional)
+
+================================================================================
+END OF INTEGRATION GUIDE
+================================================================================
+
