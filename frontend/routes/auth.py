@@ -28,6 +28,9 @@ def login():
         api = BackendAPI()
         response = api.login(username, password)
         
+        # Debug: print the full response
+        print(f"🔍 Login response: {response}")
+        
         if 'error' in response:
             flash(parse_error_message(response), 'danger')
             return render_template('auth/login.html')
@@ -40,6 +43,9 @@ def login():
             'email': response.get('user', {}).get('email'),
             'role': response.get('user', {}).get('role')
         }
+        
+        # Debug: print session data
+        print(f"🔍 Session user data: {session.get('user')}")
         
         flash('Login successful!', 'success')
         return redirect(url_for('main.dashboard'))

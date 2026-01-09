@@ -14,6 +14,7 @@ from routes.works import works_bp
 from routes.extract import extract_bp
 from routes.reports import reports_bp
 from routes.analytics import analytics_bp
+from routes.admin import admin_bp
 
 def create_app(config_class=Config):
     app = Flask(__name__)
@@ -29,6 +30,7 @@ def create_app(config_class=Config):
     app.register_blueprint(extract_bp, url_prefix='/extract')
     app.register_blueprint(reports_bp, url_prefix='/reports')
     app.register_blueprint(analytics_bp, url_prefix='/analytics')
+    app.register_blueprint(admin_bp, url_prefix='/admin')
     
     # Error handlers
     @app.errorhandler(404)

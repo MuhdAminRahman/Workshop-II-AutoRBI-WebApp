@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+
+{% block title %}{{ 'Create' if action == 'create' else 'Edit' }} User - AutoRBI{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <!-- Header -->
+            <div class="mb-4">
+                <a href="{{ url_for('admin.list_users') }}" class="text-decoration-none">
+                    <i class="bi bi-arrow-left"></i> Back to Users
+                </a>
+                <h2 class="mt-2 fw-bold">
+                    <i class="bi bi-person-{{ 'plus' if action == 'create' else 'gear' }}"></i>
+                    {{ 'Create New' if action == 'create' else 'Edit' }} User
+                </h2>
+            </div>
+
+            <!-- User Form -->
+            <div class="card border-0 shadow-sm">
+                <div class="card-body p-4">
+                    <form method="POST">
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Username <span class="text-danger">*</span></label>
+                                <input type="text" name="username" class="form-control" 
+                                       value="{{ user.username if user else '' }}" required>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Full Name <span class="text-danger">*</span></label>
+                                <input type="text" name="full_name" class="form-control" 
+                                       value="{{ user.full_name if user else '' }}" required>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Email <span class="text-danger">*</span></label>
+                            <input type="email" name="email" class="form-control" 
+                                   value="{{ user.email if user else '' }}" required>
+                        </div>
+
+                        {% if action == 'create' %}
+                        <div class="mb-3">
+                            <label class="form-label">Password <span class="text-danger">*</span></label>
+                            <input type="password" name="password" class="form-control" required>
+                            <small class="text-muted">Minimum 8 characters</small>
+                        </div>
+                        {% endif %}
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Role <span class="text-danger">*</span></label>
+                                <select name="role" class="form-select" required>
+                                    <option value="engineer" {{ 'selected' if user and user.role == 'Engineer' else '' }}>
+                                        Engineer
+                                    </option>
+                                    <option value="admin" {{ 'selected' if user and user.role == 'Admin' else '' }}>
+                                        Admin
+                                    </option>
+                                    <option value="viewer" {{ 'selected' if user and user.role == 'Viewer' else '' }}>
+                                        Viewer
+                                    </option>
+                                </select>
+                            </div>
+                            {% if action == 'edit' %}
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Status</label>
+                                <div class="form-check form-switch mt-2">
+                                    <input type="checkbox" name="is_active" class="form-check-input" 
+                                           id="isActive" {{ 'checked' if user and user.is_active else '' }}>
+                                    <label class="form-check-label" for="isActive">Active</label>
+                                </div>
+                            </div>
+                            {% endif %}
+                        </div>
+
+                        <div class="alert alert-info">
+                            <i class="bi bi-info-circle"></i>
+                            <strong>Role Permissions:</strong>
+                            <ul class="mb-0 mt-2">
+                                <li><strong>Admin:</strong> Full system access, manage users and all works</li>
+                                <li><strong>Engineer:</strong> Create and manage own works, generate reports</li>
+                                <li><strong>Viewer:</strong> Read-only access to assigned works</li>
+                            </ul>
+                        </div>
+
+                        <div class="d-flex justify-content-between">
+                            <a href="{{ url_for('admin.list_users') }}" class="btn btn-outline-secondary">
+                                <i class="bi bi-x"></i> Cancel
+                            </a>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-check"></i> {{ 'Create User' if action == 'create' else 'Save Changes' }}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

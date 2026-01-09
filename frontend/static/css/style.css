@@ -40,8 +40,16 @@ body {
 }
 
 .sidebar-header {
-    padding: 24px 20px;
+    padding: 24px 0;
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    text-align: center;
+}
+
+.sidebar-header h2 {
+    margin: 0;
+    font-weight: 700;
+    font-size: 2rem;
+    letter-spacing: 1px;
 }
 
 .sidebar-header h4 {
@@ -501,4 +509,120 @@ body {
 
 #themeToggle i {
     transition: transform 0.5s ease;
+}
+
+/* Dark theme - Additional fixes for white backgrounds */
+[data-theme="dark"] .card-footer {
+    background-color: var(--bg-tertiary) !important;
+    border-top-color: var(--border-color);
+}
+
+[data-theme="dark"] .table thead {
+    background-color: var(--bg-tertiary) !important;
+}
+
+[data-theme="dark"] .table tbody tr {
+    background-color: var(--bg-secondary) !important;
+}
+
+[data-theme="dark"] .table tbody tr:hover {
+    background-color: var(--bg-tertiary) !important;
+}
+
+[data-theme="dark"] .table-light {
+    background-color: var(--bg-tertiary) !important;
+    color: var(--text-primary) !important;
+}
+
+[data-theme="dark"] .bg-white {
+    background-color: var(--bg-secondary) !important;
+}
+
+[data-theme="dark"] .bg-light {
+    background-color: var(--bg-tertiary) !important;
+}
+
+[data-theme="dark"] .analytics-circle-container {
+    background-color: transparent !important;
+}
+
+[data-theme="dark"] .quick-action-card {
+    background-color: var(--bg-secondary) !important;
+}
+
+[data-theme="dark"] .activity-content {
+    background-color: var(--bg-tertiary) !important;
+}
+
+[data-theme="dark"] .filter-section {
+    background-color: var(--bg-secondary) !important;
+}
+
+
+/* Dark theme - More specific table styling */
+[data-theme="dark"] .table > :not(caption) > * > * {
+    background-color: var(--bg-secondary) !important;
+    color: var(--text-primary) !important;
+    border-color: var(--border-color) !important;
+}
+
+[data-theme="dark"] .table > thead > tr > th {
+    background-color: var(--bg-tertiary) !important;
+    border-bottom-color: var(--border-color) !important;
+}
+
+[data-theme="dark"] .table > tbody > tr > td {
+    background-color: var(--bg-secondary) !important;
+}
+
+[data-theme="dark"] .table > tbody > tr:hover > td {
+    background-color: var(--bg-tertiary) !important;
+}
+
+[data-theme="dark"] .card-header.bg-white {
+    background-color: var(--bg-secondary) !important;
+}
+
+[data-theme="dark"] .bg-gradient-primary {
+    background: linear-gradient(135deg, #0a58ca 0%, #084298 100%) !important;
+}
+
+/* Dark theme - Accordion styling */
+[data-theme="dark"] .accordion-item {
+    background-color: var(--bg-secondary) !important;
+    border-color: var(--border-color) !important;
+}
+
+[data-theme="dark"] .accordion-button {
+    background-color: var(--bg-tertiary) !important;
+    color: var(--text-primary) !important;
+    border-color: var(--border-color) !important;
+}
+
+[data-theme="dark"] .accordion-button:not(.collapsed) {
+    background-color: var(--bg-tertiary) !important;
+    color: var(--text-primary) !important;
+}
+
+[data-theme="dark"] .accordion-button:focus {
+    border-color: var(--border-color) !important;
+    box-shadow: none;
+}
+
+[data-theme="dark"] .accordion-body {
+    background-color: var(--bg-secondary) !important;
+    color: var(--text-primary) !important;
+}
+
+[data-theme="dark"] .accordion-collapse {
+    background-color: var(--bg-secondary) !important;
+    border-color: var(--border-color) !important;
+}
+
+/* Table header styling - Light grey for light theme */
+.table thead th {
+    background-color: #dee2e6 !important;
+    color: #495057 !important;
+    font-weight: 600;
+    border-bottom: 2px solid #ced4da !important;
 }

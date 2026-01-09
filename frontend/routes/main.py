@@ -63,61 +63,61 @@ def dashboard():
         )
     else:
         # Engineer: Show their own works analysis
-        total_works = len(works)
-        active_works = sum(1 for w in works if w.get('status') == 'active')
-        completed_works = sum(1 for w in works if w.get('status') == 'completed')
+        current_user_id = session.get('user', {}).get('id')
         
-        # Get total equipment from backend analytics API
+        # Filter works by current user
+        user_works = [w for w in works if w.get('user_id') == current_user_id]
+        
+        total_works = len(user_works)
+        active_works = sum(1 for w in user_works if w.get('status') == 'active')
+        completed_works = sum(1 for w in user_works if w.get('status') == 'completed')
+        
+        # Get total equipment from user's works only
         total_equipment = 0
-        try:
-            equipment_response = api.get_equipment_count(period='all_time')
-            if equipment_response and 'total' in equipment_response:
-                total_equipment = equipment_response['total']
-        except:
-            # If API fails, use 0
-            total_equipment = 0
+        total_components = 0
+        total_fields = 0
+        filled_fields = 0
         
-        # Calculate average health score based on data completeness
-        avg_health_score = 0
+        # Required fields for health score calculation
+        required_fields = ['fluid', 'material_spec', 'material_grade', 'insulation', 
+                         'design_temp', 'design_pressure', 'operating_temp', 'operating_pressure']
+        
         try:
-            # Required fields for each component
-            required_fields = ['fluid', 'material_spec', 'material_grade', 'insulation', 
-                             'design_temp', 'design_pressure', 'operating_temp', 'operating_pressure']
-            
-            total_fields = 0
-            filled_fields = 0
-            
-            # Get all components from all works to calculate completeness
-            for work in works:
+            # Get equipment and components from each user work
+            for work in user_works:
                 work_id = work.get('id')
                 if work_id:
                     try:
-                        review_data = api.get_extraction_review(work_id)
-                        if review_data and 'equipment' in review_data:
-                            for equipment in review_data['equipment']:
-                                components = equipment.get('components', [])
-                                for component in components:
-                                    total_fields += len(required_fields)
-                                    # Count filled fields
-                                    for field in required_fields:
-                                        value = component.get(field)
-                                        if value and str(value).strip() and str(value).strip().lower() != 'none':
-                                            filled_fields += 1
+                        work_detail = api.get_work(work_id)
+                        equipment_list = work_detail.get('equipment', [])
+                        
+                        for equipment in equipment_list:
+                            total_equipment += 1
+                            components = equipment.get('components', [])
+                            
+                            for component in components:
+                                total_components += 1
+                                total_fields += len(required_fields)
+                                
+                                # Count filled fields
+                                for field in required_fields:
+                                    value = component.get(field)
+                                    if value and str(value).strip() and str(value).strip().lower() not in ['none', 'n/a', '']:
+                                        filled_fields += 1
                     except:
-                        pass
-            
-            # Calculate percentage
-            if total_fields > 0:
-                avg_health_score = round((filled_fields / total_fields) * 100)
-            else:
-                avg_health_score = 75  # Default if no data
-                
+                        continue
         except:
-            avg_health_score = 75  # Default on error
+            pass
+        
+        # Calculate average health score
+        if total_fields > 0:
+            avg_health_score = round((filled_fields / total_fields) * 100)
+        else:
+            avg_health_score = 0  # No data = 0%
         
         return render_template(
             'dashboard/index.html',
-            works=works[:5],  # Show only 5 most recent
+            works=user_works[:5],  # Show only 5 most recent
             total_works=total_works,
             active_works=active_works,
             completed_works=completed_works,

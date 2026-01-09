@@ -28,8 +28,8 @@
     {% if session.user %}
     <!-- Sidebar Navigation (for logged in users) -->
     <div class="sidebar" id="sidebar">
-        <div class="sidebar-header">
-            <img src="{{ url_for('static', filename='images/ipetro-logo.png') }}" alt="iPETRO" style="height: 40px; width: auto;">
+        <div class="sidebar-header text-center">
+            <h2 class="mb-0 fw-bold">AutoRBI</h2>
         </div>
         <ul class="sidebar-menu">
             <li>
@@ -37,6 +37,18 @@
                     <i class="bi bi-speedometer2"></i> Dashboard
                 </a>
             </li>
+            {% if session.user.role == 'Admin' %}
+            <li>
+                <a href="{{ url_for('admin.admin_dashboard') }}" class="{% if request.endpoint and 'admin' in request.endpoint %}active{% endif %}">
+                    <i class="bi bi-shield-check"></i> Admin Panel
+                </a>
+            </li>
+            <li>
+                <a href="{{ url_for('admin.list_users') }}" class="{% if request.endpoint and 'admin.list_users' in request.endpoint or request.endpoint and 'admin.create_user' in request.endpoint or request.endpoint and 'admin.edit_user' in request.endpoint %}active{% endif %}">
+                    <i class="bi bi-people"></i> User Management
+                </a>
+            </li>
+            {% endif %}
             <li>
                 <a href="{{ url_for('works.list_works') }}" class="{% if request.endpoint and 'works' in request.endpoint and request.endpoint != 'works.work_history' %}active{% endif %}">
                     <i class="bi bi-folder"></i> Works
@@ -63,7 +75,7 @@
                 <i class="bi bi-person-circle"></i>
                 <div>
                     <strong>{{ session.user.username }}</strong>
-                    <small class="d-block text-muted">{{ session.user.role|capitalize }}</small>
+                    <small class="d-block text-secondary">{{ session.user.role|capitalize }}</small>
                 </div>
             </div>
             <a href="{{ url_for('auth.logout') }}" class="btn btn-outline-danger btn-sm mt-2 w-100">

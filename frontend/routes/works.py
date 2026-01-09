@@ -2,7 +2,7 @@
 Works Routes
 CRUD operations for works
 """
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, session
 from utils.auth_middleware import login_required, get_auth_token
 from utils.api_client import BackendAPI
 from utils.helpers import parse_error_message, get_status_badge_class
@@ -386,6 +386,9 @@ def work_history():
     """View work history and activity logs"""
     token = get_auth_token()
     api = BackendAPI(token)
+    current_user = session.get('user', {})
+    user_id = current_user.get('id')
+    is_admin = current_user.get('role') == 'Admin'
     
     # Get filter parameters
     days = request.args.get('days', 7, type=int)
@@ -411,14 +414,27 @@ def work_history():
         else:
             activities = response.get('activities', response.get('items', []))
             total = response.get('total', len(activities))
+        
+        # Filter activities by user for engineers
+        if not is_admin and activities:
+            # Engineers should only see their own activities
+            activities = [a for a in activities if a.get('user_id') == user_id]
+            total = len(activities)
+            
     except Exception as e:
         flash(f'Error fetching work history: {str(e)}', 'danger')
         activities = []
         total = 0
     
-    # Get list of all works for filtering dropdown
+    # Get list of works for filtering dropdown
     works_response = api.get_works()
-    works = works_response.get('works', []) if isinstance(works_response, dict) else []
+    all_works = works_response.get('works', []) if isinstance(works_response, dict) else []
+    
+    # Filter works by user for engineers
+    if not is_admin:
+        works = [w for w in all_works if w.get('user_id') == user_id]
+    else:
+        works = all_works
     
     return render_template(
         'works/history.html',

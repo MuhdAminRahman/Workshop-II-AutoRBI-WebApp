@@ -80,12 +80,12 @@
                         <div class="circular-progress-wrapper">
                             <svg class="circular-progress" width="140" height="140">
                                 <circle class="progress-bg" cx="70" cy="70" r="60"></circle>
-                                <circle class="progress-bar progress-warning" cx="70" cy="70" r="60" 
+                                <circle class="progress-bar {% if avg_health_score|default(0) >= 80 %}progress-success{% elif avg_health_score|default(0) >= 50 %}progress-warning{% elif avg_health_score|default(0) >= 30 %}progress-orange{% else %}progress-danger{% endif %}" cx="70" cy="70" r="60" 
                                         id="healthScoreCircle"
-                                        style="--progress: {{ avg_health_score|default(75)|round }}"></circle>
+                                        style="--progress: {{ avg_health_score|default(0)|round }}"></circle>
                             </svg>
                             <div class="circular-progress-value">
-                                <h3 class="mb-0 fw-bold text-warning">{{ avg_health_score|default(75)|round|int }}%</h3>
+                                <h3 class="mb-0 fw-bold {% if avg_health_score|default(0) >= 80 %}text-success{% elif avg_health_score|default(0) >= 50 %}text-warning{% elif avg_health_score|default(0) >= 30 %}text-orange{% else %}text-danger{% endif %}">{{ avg_health_score|default(0)|round|int }}%</h3>
                             </div>
                         </div>
                         <h6 class="mt-3 fw-bold">Avg. Health Score</h6>
@@ -209,7 +209,7 @@
 
     <!-- Recent Works -->
     <div class="card border-0 shadow-sm">
-        <div class="card-header py-3">
+        <div class="card-header bg-primary text-white py-3">
             <h5 class="mb-0 fw-bold">
                 <i class="bi bi-clock-history"></i> Recent Works
             </h5>
@@ -390,6 +390,18 @@
     
     .progress-warning {
         stroke: #ffc107;
+    }
+    
+    .progress-orange {
+        stroke: #fd7e14;
+    }
+    
+    .progress-danger {
+        stroke: #dc3545;
+    }
+    
+    .text-orange {
+        color: #fd7e14 !important;
     }
     
     .circular-progress-value {

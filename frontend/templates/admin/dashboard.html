@@ -1,0 +1,212 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Dashboard - AutoRBI{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="mb-4">
+        <h2 class="fw-bold">
+            <i class="bi bi-speedometer2 text-primary"></i> Admin Dashboard
+        </h2>
+        <p class="text-muted">System overview and management</p>
+    </div>
+
+    <!-- Statistics Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <p class="text-muted mb-1">Total Works</p>
+                            <h2 class="mb-0">{{ total_works }}</h2>
+                            <small class="text-success"><i class="bi bi-arrow-up"></i> All users</small>
+                        </div>
+                        <div class="bg-primary bg-opacity-10 p-3 rounded">
+                            <i class="bi bi-briefcase-fill fs-2 text-primary"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <p class="text-muted mb-1">Active Works</p>
+                            <h2 class="mb-0">{{ active_works }}</h2>
+                            <small class="text-info"><i class="bi bi-activity"></i> In progress</small>
+                        </div>
+                        <div class="bg-info bg-opacity-10 p-3 rounded">
+                            <i class="bi bi-play-circle-fill fs-2 text-info"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <p class="text-muted mb-1">Completed</p>
+                            <h2 class="mb-0">{{ completed_works }}</h2>
+                            <small class="text-success"><i class="bi bi-check-circle"></i> Finished</small>
+                        </div>
+                        <div class="bg-success bg-opacity-10 p-3 rounded">
+                            <i class="bi bi-check-circle-fill fs-2 text-success"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <p class="text-muted mb-1">Total Users</p>
+                            <h2 class="mb-0">{{ total_users }}</h2>
+                            <small class="text-warning"><i class="bi bi-people"></i> {{ active_users }} active</small>
+                        </div>
+                        <div class="bg-warning bg-opacity-10 p-3 rounded">
+                            <i class="bi bi-people-fill fs-2 text-warning"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <h5 class="card-title mb-3"><i class="bi bi-lightning-fill"></i> Quick Actions</h5>
+                    <div class="row">
+                        <div class="col-md-3">
+                            <a href="{{ url_for('admin.list_users') }}" class="btn btn-outline-primary w-100 mb-2">
+                                <i class="bi bi-people"></i> Manage Users
+                            </a>
+                        </div>
+                        <div class="col-md-3">
+                            <a href="{{ url_for('admin.create_user') }}" class="btn btn-outline-success w-100 mb-2">
+                                <i class="bi bi-person-plus"></i> Create User
+                            </a>
+                        </div>
+                        <div class="col-md-3">
+                            <a href="{{ url_for('works.list_works') }}" class="btn btn-outline-info w-100 mb-2">
+                                <i class="bi bi-briefcase"></i> View All Works
+                            </a>
+                        </div>
+                        <div class="col-md-3">
+                            <a href="{{ url_for('works.work_history') }}" class="btn btn-outline-warning w-100 mb-2">
+                                <i class="bi bi-clock-history"></i> Activity Log
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- All Works by All Users -->
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-white py-3">
+            <h5 class="mb-0 fw-bold">
+                <i class="bi bi-list-ul"></i> All Works (All Users)
+            </h5>
+        </div>
+        <div class="card-body p-0">
+            {% if works %}
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Work Name</th>
+                            <th>Owner</th>
+                            <th>Status</th>
+                            <th>Created</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for work in works %}
+                        <tr>
+                            <td>
+                                <strong>{{ work.name }}</strong>
+                                <br><small class="text-muted">{{ work.description[:50] }}...</small>
+                            </td>
+                            <td>
+                                {% set work_user = users|selectattr('id', 'equalto', work.user_id)|first %}
+                                {% if work_user %}
+                                <i class="bi bi-person-circle"></i> {{ work_user.full_name }}
+                                <br><small class="text-muted">@{{ work_user.username }}</small>
+                                {% else %}
+                                <span class="text-muted">Unknown</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="badge bg-{{ work.status|status_badge }}">
+                                    {{ work.status|capitalize }}
+                                </span>
+                            </td>
+                            <td>{{ work.created_at|datetime if work.created_at else 'N/A' }}</td>
+                            <td>
+                                <a href="{{ url_for('works.view_work', work_id=work.id) }}" 
+                                   class="btn btn-sm btn-outline-primary">
+                                    <i class="bi bi-eye"></i> View
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center py-5">
+                <i class="bi bi-briefcase" style="font-size: 4rem; color: #dee2e6;"></i>
+                <h5 class="mt-3 text-muted">No Works Yet</h5>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Recent Activity -->
+    <div class="card border-0 shadow-sm">
+        <div class="card-header bg-white py-3">
+            <h5 class="mb-0 fw-bold">
+                <i class="bi bi-clock-history"></i> Recent Activity (Last 7 Days)
+            </h5>
+        </div>
+        <div class="card-body">
+            {% if recent_activities %}
+            <div class="list-group list-group-flush">
+                {% for activity in recent_activities %}
+                <div class="list-group-item px-0">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <h6 class="mb-1">
+                                <span class="badge bg-secondary">{{ activity.entity_type|capitalize }}</span>
+                                {{ activity.action|capitalize }}
+                            </h6>
+                            <small class="text-muted">
+                                User ID: {{ activity.user_id }} • 
+                                Entity ID: {{ activity.entity_id }} • 
+                                {{ activity.created_at|datetime }}
+                            </small>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-muted text-center py-4">No recent activity</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

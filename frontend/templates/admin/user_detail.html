@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+
+{% block title %}User Details - AutoRBI{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="mb-4">
+        <a href="{{ url_for('admin.list_users') }}" class="text-decoration-none">
+            <i class="bi bi-arrow-left"></i> Back to Users
+        </a>
+    </div>
+
+    <!-- User Info Card -->
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body">
+            <div class="row align-items-center">
+                <div class="col-auto">
+                    <div class="avatar-lg bg-primary bg-opacity-10 rounded-circle d-flex align-items-center justify-content-center" 
+                         style="width: 80px; height: 80px;">
+                        <i class="bi bi-person fs-1 text-primary"></i>
+                    </div>
+                </div>
+                <div class="col">
+                    <h3 class="mb-1">{{ user.full_name }}</h3>
+                    <p class="text-muted mb-2">@{{ user.username }} • {{ user.email }}</p>
+                    <div>
+                        {% if user.role == 'Admin' %}
+                        <span class="badge bg-warning text-dark me-2">
+                            <i class="bi bi-shield-check"></i> Administrator
+                        </span>
+                        {% elif user.role == 'Engineer' %}
+                        <span class="badge bg-info me-2">
+                            <i class="bi bi-gear"></i> Engineer
+                        </span>
+                        {% else %}
+                        <span class="badge bg-secondary me-2">
+                            <i class="bi bi-eye"></i> {{ user.role|capitalize }}
+                        </span>
+                        {% endif %}
+                        
+                        {% if user.is_active %}
+                        <span class="badge bg-success">
+                            <i class="bi bi-check-circle"></i> Active
+                        </span>
+                        {% else %}
+                        <span class="badge bg-danger">
+                            <i class="bi bi-x-circle"></i> Inactive
+                        </span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="col-auto">
+                    <a href="{{ url_for('admin.edit_user', user_id=user.id) }}" class="btn btn-primary">
+                        <i class="bi bi-pencil"></i> Edit User
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Statistics -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <h6 class="text-muted">Total Works</h6>
+                    <h2 class="mb-0">{{ works|length }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <h6 class="text-muted">Active Works</h6>
+                    <h2 class="mb-0">{{ works|selectattr('status', 'equalto', 'active')|list|length }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <h6 class="text-muted">Completed</h6>
+                    <h2 class="mb-0">{{ works|selectattr('status', 'equalto', 'completed')|list|length }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <h6 class="text-muted">Member Since</h6>
+                    <h4 class="mb-0">{{ user.created_at|datetime if user.created_at else 'N/A' }}</h4>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Assigned Works -->
+    <div class="card border-0 shadow-sm">
+        <div class="card-header bg-white py-3">
+            <h5 class="mb-0 fw-bold">
+                <i class="bi bi-briefcase"></i> Assigned Works
+            </h5>
+        </div>
+        <div class="card-body">
+            {% if works %}
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Work Name</th>
+                            <th>Description</th>
+                            <th>Status</th>
+                            <th>Created</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for work in works %}
+                        <tr>
+                            <td><strong>{{ work.name }}</strong></td>
+                            <td>{{ work.description[:50] }}...</td>
+                            <td>
+                                <span class="badge bg-{{ work.status|status_badge }}">
+                                    {{ work.status|capitalize }}
+                                </span>
+                            </td>
+                            <td>{{ work.created_at|datetime if work.created_at else 'N/A' }}</td>
+                            <td>
+                                <a href="{{ url_for('works.view_work', work_id=work.id) }}" 
+                                   class="btn btn-sm btn-outline-primary">
+                                    <i class="bi bi-eye"></i> View
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="text-muted text-center py-4">No works assigned to this user</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -482,6 +482,10 @@ async def run_extraction(
             try:
                 logger.info(f"  Processing page {page_num + 1}/{len(images)}...")
                 
+                # Update progress BEFORE processing
+                extraction.processed_pages = page_num
+                db.commit()
+                
                 img_bytes = io.BytesIO()
                 image.save(img_bytes, format='PNG')
                 img_bytes.seek(0)
@@ -499,17 +503,25 @@ async def run_extraction(
                     completeness, missing = rules.get_completeness_score(equipment_number, page_data)
                     logger.info(f"  ✅ Page {page_num + 1} extracted (completeness: {completeness:.0f}%)")
                     
+                    # Update progress AFTER successful processing
+                    extraction.processed_pages = page_num + 1
+                    db.commit()
+                    
                     if completeness >= completeness_threshold:
                         logger.info(f"     Completeness {completeness:.0f}% >= threshold, done with Pass 1")
                         break
                     else:
                         logger.info(f"     Completeness {completeness:.0f}% < {completeness_threshold}%, will retry")
-                
-                extraction.processed_pages = page_num + 1
-                db.commit()
+                else:
+                    # Update progress even if no data found
+                    extraction.processed_pages = page_num + 1
+                    db.commit()
             
             except Exception as e:
                 logger.warning(f"  ⚠️  Error on page {page_num + 1}: {str(e)}")
+                # Update progress even on error
+                extraction.processed_pages = page_num + 1
+                db.commit()
                 continue
         
         # Check if we have data

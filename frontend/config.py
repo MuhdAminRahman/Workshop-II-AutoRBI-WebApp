@@ -14,6 +14,8 @@ class Config:
     DEBUG = os.getenv('DEBUG', 'True') == 'True'
     
     # Backend API (Deployed on Render)
+    # To use LOCAL backend: Change to 'http://localhost:8000' (must have backend running locally)
+    # To use DEPLOYED backend: Use 'https://workshop-ii-autorbi-webapp.onrender.com'
     BACKEND_API_URL = os.getenv('BACKEND_API_URL', 'https://workshop-ii-autorbi-webapp.onrender.com')
     BACKEND_WS_URL = os.getenv('BACKEND_WS_URL', 'wss://workshop-ii-autorbi-webapp.onrender.com')
     

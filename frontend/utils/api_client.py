@@ -233,11 +233,6 @@ class BackendAPI:
         """
         return self._post(f'/api/works/{work_id}/components/bulk-update', data={'changes': changes})
     
-    # Work history endpoint
-    def get_work_history(self, days: int = 7, limit: int = 100) -> Dict:
-        """Get work activity history for recent days"""
-        return self._get('/api/history/period', params={'days': days, 'limit': limit})
-    
     # Equipment endpoints
     def get_equipment_list(self, work_id: int) -> Dict:
         """Get all equipment for a work"""
@@ -298,21 +293,30 @@ class BackendAPI:
             return None
     
     # Analytics - Using actual backend endpoints
-    def get_extraction_analytics(self, period: str = 'last_30_days') -> Dict:
+    def get_extraction_analytics(self, period: str = 'last_30_days', group_by: str = None) -> Dict:
         """Get extraction status metrics for analytics dashboard"""
-        return self._get('/api/analytics/extractions/status', params={'period': period})
+        params = {'period': period}
+        if group_by:
+            params['group_by'] = group_by
+        return self._get('/api/analytics/extractions/status', params=params)
     
-    def get_works_status(self, period: str = 'last_30_days') -> Dict:
+    def get_works_status(self, period: str = 'last_30_days', group_by: str = None) -> Dict:
         """Get works status metrics"""
-        return self._get('/api/analytics/works/status', params={'period': period})
+        params = {'period': period}
+        if group_by:
+            params['group_by'] = group_by
+        return self._get('/api/analytics/works/status', params=params)
     
     def get_equipment_count(self, period: str = 'last_30_days') -> Dict:
         """Get equipment count metrics"""
         return self._get('/api/analytics/equipment/count', params={'period': period})
     
-    def get_components_count(self, period: str = 'last_30_days') -> Dict:
+    def get_components_count(self, period: str = 'last_30_days', group_by: str = None) -> Dict:
         """Get components count metrics"""
-        return self._get('/api/analytics/components/count', params={'period': period})
+        params = {'period': period}
+        if group_by:
+            params['group_by'] = group_by
+        return self._get('/api/analytics/components/count', params=params)
     
     # Extraction status (individual)
     def get_extraction_status(self, extraction_id: int) -> Dict:
@@ -327,3 +331,50 @@ class BackendAPI:
     def get_work_activities(self, work_id: int) -> Dict:
         """Get activity logs for a specific work"""
         return self._get(f'/api/history/work/{work_id}')
+    
+    # ============================================================================
+    # USER MANAGEMENT (Admin)
+    # ============================================================================
+    
+    def get_users(self, skip: int = 0, limit: int = 100) -> Dict:
+        """Get list of all users (Admin only)"""
+        return self._get('/api/users', params={'skip': skip, 'limit': limit})
+    
+    def get_user(self, user_id: int) -> Dict:
+        """Get specific user details (Admin only)"""
+        return self._get(f'/api/users/{user_id}')
+    
+    def create_user(self, username: str, email: str, password: str, full_name: str, role: str = 'engineer') -> Dict:
+        """Create new user (Admin only)"""
+        data = {
+            'username': username,
+            'email': email,
+            'password': password,
+            'full_name': full_name,
+            'role': role
+        }
+        return self._post('/api/users', data=data)
+    
+    def update_user(self, user_id: int, username: str = None, email: str = None, 
+                   full_name: str = None, role: str = None, is_active: bool = None) -> Dict:
+        """Update user (Admin only)"""
+        data = {}
+        if username is not None:
+            data['username'] = username
+        if email is not None:
+            data['email'] = email
+        if full_name is not None:
+            data['full_name'] = full_name
+        if role is not None:
+            data['role'] = role
+        if is_active is not None:
+            data['is_active'] = is_active
+        return self._put(f'/api/users/{user_id}', data=data)
+    
+    def delete_user(self, user_id: int) -> Dict:
+        """Delete user (Admin only)"""
+        return self._delete(f'/api/users/{user_id}')
+    
+    def get_current_user(self) -> Dict:
+        """Get current logged-in user details"""
+        return self._get('/api/auth/me')

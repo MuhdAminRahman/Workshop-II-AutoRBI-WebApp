@@ -19,7 +19,7 @@ def admin_required(f):
     """Decorator to require admin role"""
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if 'user' not in session or session['user'].get('role') != 'admin':
+        if 'user' not in session or session['user'].get('role') != 'Admin':
             flash('Admin access required.', 'danger')
             return redirect(url_for('main.index'))
         return f(*args, **kwargs)
