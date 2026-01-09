@@ -52,79 +52,26 @@ def view_reports(work_id):
     # Extract work from response (it may be nested)
     work = work_response.get('work', work_response)
     
-    # Get reports
-    reports_response = api.get_reports(work_id)
+    # Get all generated reports
+    reports_response = api.get_work_reports(work_id)
+    reports = reports_response.get('reports', []) if 'error' not in reports_response else []
     
-    reports = reports_response if not 'error' in reports_response else {}
+    # Separate Excel and PowerPoint reports
+    excel_reports = [r for r in reports if r.get('file_type') == 'excel']
+    ppt_reports = [r for r in reports if r.get('file_type') == 'powerpoint']
+    
+    # Check if templates are uploaded
+    has_excel_template = work.get('excel_masterfile_url') is not None
+    has_ppt_template = work.get('ppt_template_url') is not None
     
     return render_template(
         'reports/view.html',
         work=work,
-        reports=reports
+        excel_reports=excel_reports,
+        ppt_reports=ppt_reports,
+        has_excel_template=has_excel_template,
+        has_ppt_template=has_ppt_template
     )
-
-@reports_bp.route('/<int:work_id>/excel/<int:version>/download')
-@login_required
-def download_excel(work_id, version):
-    """Download Excel file"""
-    token = get_auth_token()
-    api = BackendAPI(token)
-    
-    file_content = api.download_excel(work_id, version)
-    
-    if not file_content:
-        flash('Failed to download Excel file.', 'danger')
-        return redirect(url_for('reports.view_reports', work_id=work_id))
-    
-    return send_file(
-        BytesIO(file_content),
-        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        as_attachment=True,
-        download_name=f'work_{work_id}_v{version}.xlsx'
-    )
-
-@reports_bp.route('/<int:work_id>/excel/<int:version>/edit')
-@login_required
-def edit_excel(work_id, version):
-    """Edit Excel data"""
-    token = get_auth_token()
-    api = BackendAPI(token)
-    
-    # Get work details
-    work_response = api.get_work(work_id)
-    
-    if 'error' in work_response:
-        flash(parse_error_message(work_response), 'danger')
-        return redirect(url_for('reports.view_reports', work_id=work_id))
-    
-    # Extract work from response
-    work = work_response.get('work', work_response)
-    
-    return render_template(
-        'reports/editor.html',
-        work=work,
-        version=version
-    )
-
-@reports_bp.route('/<int:work_id>/excel/<int:version>/update', methods=['POST'])
-@login_required
-def update_excel(work_id, version):
-    """Update Excel data"""
-    token = get_auth_token()
-    api = BackendAPI(token)
-    
-    # Get JSON data from request
-    data = request.get_json()
-    
-    if not data:
-        return jsonify({'error': 'No data provided'}), 400
-    
-    response = api.update_excel_data(work_id, version, data.get('components', []))
-    
-    if 'error' in response:
-        return jsonify({'error': parse_error_message(response)}), 400
-    
-    return jsonify({'success': True, 'message': 'Data updated successfully'})
 
 @reports_bp.route('/<int:work_id>/powerpoint/generate', methods=['POST'])
 @login_required
@@ -133,31 +80,137 @@ def generate_powerpoint(work_id):
     token = get_auth_token()
     api = BackendAPI(token)
     
-    response = api.generate_powerpoint(work_id)
+    response = api.generate_ppt_report(work_id)
     
     if 'error' in response:
         flash(parse_error_message(response), 'danger')
     else:
-        flash('PowerPoint generated successfully!', 'success')
+        version = response.get('version', 'new')
+        flash(f'PowerPoint report version {version} generated successfully!', 'success')
     
     return redirect(url_for('reports.view_reports', work_id=work_id))
 
-@reports_bp.route('/<int:work_id>/powerpoint/<int:version>/download')
+@reports_bp.route('/<int:work_id>/excel/generate', methods=['POST'])
 @login_required
-def download_powerpoint(work_id, version):
-    """Download PowerPoint file"""
+def generate_excel_report(work_id):
+    """Generate Excel report"""
     token = get_auth_token()
     api = BackendAPI(token)
     
-    file_content = api.download_powerpoint(work_id, version)
+    response = api.generate_excel_report(work_id)
+    
+    if 'error' in response:
+        flash(parse_error_message(response), 'danger')
+    else:
+        version = response.get('version', 'new')
+        flash(f'Excel report version {version} generated successfully!', 'success')
+    
+    return redirect(url_for('reports.view_reports', work_id=work_id))
+
+@reports_bp.route('/<int:work_id>/templates/excel/upload', methods=['POST'])
+@login_required
+def upload_excel_template(work_id):
+    """Upload Excel template for work"""
+    token = get_auth_token()
+    api = BackendAPI(token)
+    
+    # Check if file was uploaded
+    if 'file' not in request.files:
+        flash('No file uploaded', 'danger')
+        return redirect(url_for('reports.view_reports', work_id=work_id))
+    
+    file = request.files['file']
+    
+    if file.filename == '':
+        flash('No file selected', 'danger')
+        return redirect(url_for('reports.view_reports', work_id=work_id))
+    
+    # Validate Excel file
+    if not file.filename.lower().endswith('.xlsx'):
+        flash('Only Excel files (.xlsx) are allowed', 'danger')
+        return redirect(url_for('reports.view_reports', work_id=work_id))
+    
+    # Upload to backend
+    response = api.upload_excel_template(work_id, file)
+    
+    if 'error' in response:
+        flash(parse_error_message(response), 'danger')
+    else:
+        flash('Excel template uploaded successfully!', 'success')
+    
+    return redirect(url_for('reports.view_reports', work_id=work_id))
+
+@reports_bp.route('/<int:work_id>/templates/powerpoint/upload', methods=['POST'])
+@login_required
+def upload_powerpoint_template(work_id):
+    """Upload PowerPoint template for work"""
+    token = get_auth_token()
+    api = BackendAPI(token)
+    
+    # Check if file was uploaded
+    if 'file' not in request.files:
+        flash('No file uploaded', 'danger')
+        return redirect(url_for('reports.view_reports', work_id=work_id))
+    
+    file = request.files['file']
+    
+    if file.filename == '':
+        flash('No file selected', 'danger')
+        return redirect(url_for('reports.view_reports', work_id=work_id))
+    
+    # Validate PowerPoint file
+    if not file.filename.lower().endswith('.pptx'):
+        flash('Only PowerPoint files (.pptx) are allowed', 'danger')
+        return redirect(url_for('reports.view_reports', work_id=work_id))
+    
+    # Upload to backend
+    response = api.upload_powerpoint_template(work_id, file)
+    
+    if 'error' in response:
+        flash(parse_error_message(response), 'danger')
+    else:
+        flash('PowerPoint template uploaded successfully!', 'success')
+    
+    return redirect(url_for('reports.view_reports', work_id=work_id))
+
+@reports_bp.route('/<int:work_id>/reports/<int:file_id>/download')
+@login_required
+def download_report(work_id, file_id):
+    """Download report file"""
+    token = get_auth_token()
+    api = BackendAPI(token)
+    
+    # First, get the file metadata to determine type
+    reports_response = api.get_work_reports(work_id)
+    
+    file_type = None
+    version = None
+    
+    if 'reports' in reports_response:
+        for report in reports_response['reports']:
+            if report.get('file_id') == file_id:
+                file_type = report.get('file_type')
+                version = report.get('version', file_id)
+                break
+    
+    # Download the file
+    file_content = api.download_report_file(work_id, file_id)
     
     if not file_content:
-        flash('Failed to download PowerPoint file.', 'danger')
+        flash('Failed to download report.', 'danger')
         return redirect(url_for('reports.view_reports', work_id=work_id))
+    
+    # Determine filename and mimetype based on file type
+    if file_type == 'powerpoint':
+        filename = f'work_{work_id}_presentation_v{version}.pptx'
+        mimetype = 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+    else:  # Default to excel
+        filename = f'work_{work_id}_report_v{version}.xlsx'
+        mimetype = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     
     return send_file(
         BytesIO(file_content),
-        mimetype='application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        mimetype=mimetype,
         as_attachment=True,
-        download_name=f'work_{work_id}_v{version}.pptx'
+        download_name=filename
     )

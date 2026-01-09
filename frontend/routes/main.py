@@ -67,24 +67,53 @@ def dashboard():
         active_works = sum(1 for w in works if w.get('status') == 'active')
         completed_works = sum(1 for w in works if w.get('status') == 'completed')
         
-        # Calculate total equipment across all works
+        # Get total equipment from backend analytics API
         total_equipment = 0
-        for work in works:
-            # Get equipment count from work
-            work_id = work.get('id')
-            if work_id:
-                try:
-                    # Try to get extraction data for this work
-                    review_data = api.get_extraction_review(work_id)
-                    if review_data and 'equipment' in review_data:
-                        total_equipment += len(review_data['equipment'])
-                except:
-                    # If extraction not found, skip
-                    pass
+        try:
+            equipment_response = api.get_equipment_count(period='all_time')
+            if equipment_response and 'total' in equipment_response:
+                total_equipment = equipment_response['total']
+        except:
+            # If API fails, use 0
+            total_equipment = 0
         
-        # Calculate average health score (placeholder logic)
-        # TODO: Implement proper health score calculation based on data completeness
-        avg_health_score = 75  # Default placeholder
+        # Calculate average health score based on data completeness
+        avg_health_score = 0
+        try:
+            # Required fields for each component
+            required_fields = ['fluid', 'material_spec', 'material_grade', 'insulation', 
+                             'design_temp', 'design_pressure', 'operating_temp', 'operating_pressure']
+            
+            total_fields = 0
+            filled_fields = 0
+            
+            # Get all components from all works to calculate completeness
+            for work in works:
+                work_id = work.get('id')
+                if work_id:
+                    try:
+                        review_data = api.get_extraction_review(work_id)
+                        if review_data and 'equipment' in review_data:
+                            for equipment in review_data['equipment']:
+                                components = equipment.get('components', [])
+                                for component in components:
+                                    total_fields += len(required_fields)
+                                    # Count filled fields
+                                    for field in required_fields:
+                                        value = component.get(field)
+                                        if value and str(value).strip() and str(value).strip().lower() != 'none':
+                                            filled_fields += 1
+                    except:
+                        pass
+            
+            # Calculate percentage
+            if total_fields > 0:
+                avg_health_score = round((filled_fields / total_fields) * 100)
+            else:
+                avg_health_score = 75  # Default if no data
+                
+        except:
+            avg_health_score = 75  # Default on error
         
         return render_template(
             'dashboard/index.html',

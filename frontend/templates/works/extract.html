@@ -37,14 +37,14 @@
     <div class="card border-0 shadow-sm mb-4">
         <div class="card-body">
             <div class="row text-center g-3">
-                <div class="col-md-4">
+                <div class="col-md-6">
                     <div class="stat-item">
                         <i class="bi bi-gear-fill text-primary fs-2"></i>
                         <h3 class="mb-0 mt-2">{{ equipment|length }}</h3>
                         <small class="text-muted">Equipment Items</small>
                     </div>
                 </div>
-                <div class="col-md-4">
+                <div class="col-md-6">
                     <div class="stat-item">
                         <i class="bi bi-box text-success fs-2"></i>
                         <h3 class="mb-0 mt-2">
@@ -57,14 +57,12 @@
                         <small class="text-muted">Components Extracted</small>
                     </div>
                 </div>
-                <div class="col-md-4">
-                    <div class="stat-item">
-                        <a href="{{ url_for('works.review_data', work_id=work.id) }}" class="btn btn-primary btn-lg">
-                            <i class="bi bi-table"></i> Review & Edit Data
-                        </a>
-                    </div>
-                </div>
             </div>
+        </div>
+        <div class="card-footer bg-light text-center py-3">
+            <a href="{{ url_for('works.review_data', work_id=work.id) }}" class="btn btn-primary btn-lg">
+                <i class="bi bi-table"></i> Review & Edit Data
+            </a>
         </div>
     </div>
     {% endif %}
@@ -386,6 +384,9 @@ document.addEventListener('DOMContentLoaded', function() {
         if (files.length > 1) {
             e.preventDefault();
             
+            // Set flag to prevent Next button from showing during multi-file processing
+            window.isMultiFileProcessing = true;
+            
             addLog(`Processing ${files.length} files...`, 'info');
             document.getElementById('extractionProgress').style.display = 'block';
             document.getElementById('submitBtn').disabled = true;
@@ -428,11 +429,17 @@ document.addEventListener('DOMContentLoaded', function() {
             addLog('All files processed!', 'success');
             document.getElementById('submitBtn').disabled = false;
             
+            // Clear multi-file processing flag
+            window.isMultiFileProcessing = false;
+            
             // Show next button after all files
             const nextButtonContainer = document.getElementById('nextButtonContainer');
             if (nextButtonContainer) {
                 nextButtonContainer.classList.remove('d-none');
             }
+            
+            // IMPORTANT: Return here to prevent form from submitting normally
+            return;
         }
         // For single file, let the form submit normally
     });
@@ -442,25 +449,74 @@ document.addEventListener('DOMContentLoaded', function() {
 async function pollExtractionUntilComplete(extractionId, fileName) {
     return new Promise((resolve) => {
         let previousProgress = 0;
+        let pollCount = 0;
+        const maxPolls = 300; // 10 minutes max (300 * 2 seconds)
+        let completionLogged = false; // Prevent duplicate logs
+        
         const checkInterval = setInterval(async () => {
+            pollCount++;
+            
+            // Timeout after max polls
+            if (pollCount > maxPolls) {
+                clearInterval(checkInterval);
+                addLog(`✗ Timeout: ${fileName} (exceeded 10 minutes)`, 'error');
+                resolve(false);
+                return;
+            }
+            
             try {
                 const response = await fetch(`/works/extraction/${extractionId}/status`);
                 const data = await response.json();
                 
-                // Update progress if changed
-                if (data.progress !== previousProgress) {
-                    updateProgress(data);
-                    previousProgress = data.progress;
+                console.log(`Poll ${pollCount} for ${fileName}:`, data); // Debug log
+                
+                // Update progress if changed (backend returns progress_percent)
+                const currentProgress = data.progress_percent || data.progress || 0;
+                if (currentProgress !== previousProgress) {
+                    // Update progress bar silently for multi-file (without showing Next button)
+                    const progressBar = document.getElementById('progressBar');
+                    const progressText = document.getElementById('progressText');
+                    const pagesProcessed = document.getElementById('pagesProcessed');
+                    const totalPagesEl = document.getElementById('totalPages');
+                    
+                    if (progressBar) {
+                        progressBar.style.width = currentProgress + '%';
+                        progressBar.setAttribute('aria-valuenow', currentProgress);
+                    }
+                    if (progressText) {
+                        progressText.textContent = Math.round(currentProgress) + '%';
+                    }
+                    if (pagesProcessed && data.processed_pages) {
+                        pagesProcessed.textContent = data.processed_pages;
+                    }
+                    if (totalPagesEl && data.total_pages) {
+                        totalPagesEl.textContent = data.total_pages;
+                    }
+                    
+                    previousProgress = currentProgress;
                 }
                 
-                if (data.status === 'completed') {
+                // Check status - handle all possible status values
+                const status = data.status ? data.status.toLowerCase() : '';
+                
+                if (status === 'completed' || status === 'success') {
                     clearInterval(checkInterval);
-                    addLog(`✓ Completed: ${fileName} (${data.equipment_count || 0} equipment)`, 'success');
+                    // Only log once
+                    if (!completionLogged) {
+                        addLog(`✓ Completed: ${fileName} (${data.equipment_count || 0} equipment)`, 'success');
+                        completionLogged = true;
+                    }
                     resolve(true);
-                } else if (data.status === 'failed') {
+                } else if (status === 'failed' || status === 'error') {
                     clearInterval(checkInterval);
-                    addLog(`✗ Failed: ${fileName} - ${data.message || 'Unknown error'}`, 'error');
+                    addLog(`✗ Failed: ${fileName} - ${data.error_message || data.message || 'Unknown error'}`, 'error');
                     resolve(false);
+                } else if (status === 'pending' || status === 'in_progress' || status === 'processing') {
+                    // Continue polling
+                    console.log(`${fileName} status: ${status}, progress: ${currentProgress}%`);
+                } else {
+                    // Unknown status
+                    console.warn(`Unknown status for ${fileName}: ${status}`);
                 }
             } catch (error) {
                 clearInterval(checkInterval);
@@ -650,7 +706,9 @@ function updateProgress(data) {
     const status = data.status?.toLowerCase() || 'pending';
     const totalPages = data.total_pages || 0;
     const processedPages = data.processed_pages || 0;
-    const percentage = totalPages > 0 ? Math.round((processedPages / totalPages) * 100) : 0;
+    const percentage = data.progress_percent || (totalPages > 0 ? Math.round((processedPages / totalPages) * 100) : 0);
+    
+    console.log('Update progress:', { status, totalPages, processedPages, percentage, data }); // Debug log
     
     // Update status badge
     const statusColors = {
@@ -685,7 +743,7 @@ function updateProgress(data) {
     }
     
     if (progressText) {
-        progressText.textContent = percentage + '%';
+        progressText.textContent = Math.round(percentage) + '%';
     }
     
     if (pagesProcessed) {
@@ -696,24 +754,30 @@ function updateProgress(data) {
         totalPagesEl.textContent = totalPages;
     }
     
-    // Add log based on status
-    if (data.message) {
-        if (status === 'converting') {
-            addLog(data.message, 'processing');
-        } else if (status === 'processing' || status === 'in_progress') {
-            addLog(data.message, 'processing');
-        } else if (status === 'completed') {
-            addLog(data.message, 'success');
-        } else if (status === 'failed') {
-            addLog(data.message, 'error');
-        } else {
-            addLog(data.message, 'info');
+    // Log progress updates (not on every poll, only when progress changes)
+    if (status === 'converting') {
+        addLog('Converting PDF pages to images...', 'processing');
+    } else if ((status === 'processing' || status === 'in_progress') && processedPages > 0 && totalPages > 0) {
+        // Only log when we have actual progress
+        if (!window.lastLoggedProgress || window.lastLoggedProgress !== `${processedPages}/${totalPages}`) {
+            addLog(`Processing page ${processedPages} of ${totalPages}...`, 'processing');
+            window.lastLoggedProgress = `${processedPages}/${totalPages}`;
         }
     }
     
     // Handle completion
     if (status === 'completed') {
-        clearInterval(pollInterval);
+        // Stop polling immediately
+        if (pollInterval) {
+            clearInterval(pollInterval);
+            pollInterval = null;
+        }
+        
+        // Prevent duplicate completion messages
+        if (window.extractionCompleted) {
+            return; // Already processed completion
+        }
+        window.extractionCompleted = true;
         
         if (statusBadge) {
             statusBadge.innerHTML = '<i class="bi bi-check-circle-fill me-2"></i> COMPLETED';
@@ -735,18 +799,27 @@ function updateProgress(data) {
             equipmentCount.textContent = data.equipment_count || 0;
         }
         
-        // Show Next button in bottom right
-        if (nextButtonContainer) {
+        // Only show Next button if not in multi-file processing mode
+        if (nextButtonContainer && !window.isMultiFileProcessing) {
             nextButtonContainer.classList.remove('d-none');
+            addLog(`✓ Extraction completed! ${data.equipment_count || 0} equipment items extracted.`, 'success');
+            addLog('Click the Next button to review and edit component data.', 'info');
         }
-        
-        addLog(`✓ Extraction completed! ${data.equipment_count || 0} equipment items extracted.`, 'success');
-        addLog('Click the Next button to review and edit component data.', 'info');
     }
     
     // Handle failure
     if (status === 'failed') {
-        clearInterval(pollInterval);
+        // Stop polling immediately
+        if (pollInterval) {
+            clearInterval(pollInterval);
+            pollInterval = null;
+        }
+        
+        // Prevent duplicate failure messages
+        if (window.extractionFailed) {
+            return; // Already processed failure
+        }
+        window.extractionFailed = true;
         
         if (statusBadge) {
             statusBadge.innerHTML = '<i class="bi bi-x-circle-fill me-2"></i> FAILED';
@@ -791,7 +864,7 @@ function pollStatus() {
             return response.json();
         })
         .then(data => {
-            console.log('Status data:', data);
+            console.log('Status data received:', data);
             
             // Check if we got an error response
             if (data.error) {
@@ -801,6 +874,7 @@ function pollStatus() {
             // Reset error count on successful response
             window.pollErrorCount = 0;
             
+            // ALWAYS update progress, even if data seems unchanged
             updateProgress(data);
         })
         .catch(error => {
@@ -837,6 +911,16 @@ function pollStatus() {
 // Handle form submission
 document.getElementById('uploadForm').addEventListener('submit', function(e) {
     e.preventDefault();
+    
+    // Reset completion flags for new extraction
+    window.extractionCompleted = false;
+    window.extractionFailed = false;
+    
+    // Clear any existing polling interval
+    if (pollInterval) {
+        clearInterval(pollInterval);
+        pollInterval = null;
+    }
     
     const submitBtn = document.getElementById('submitBtn');
     const fileInput = document.getElementById('pdfFile');
@@ -904,6 +988,14 @@ document.getElementById('uploadForm').addEventListener('submit', function(e) {
             addLog('Converting PDF pages to images...', 'processing');
             
             console.log('Starting to poll for extraction ID:', extractionId);
+            
+            // Initialize progress display
+            updateProgress({
+                status: 'pending',
+                total_pages: 0,
+                processed_pages: 0,
+                progress_percent: 0
+            });
             
             // Start polling immediately
             pollStatus();

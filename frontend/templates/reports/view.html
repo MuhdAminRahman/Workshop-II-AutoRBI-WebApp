@@ -22,99 +22,265 @@
         </a>
     </div>
 
-    <!-- Excel Files Section -->
+    <!-- SECTION 1: EXCEL TEMPLATE & REPORTS -->
     <div class="card border-0 shadow-sm mb-4">
         <div class="card-header bg-white py-3">
-            <h5 class="mb-0 fw-bold">
-                <i class="bi bi-file-earmark-excel text-success"></i> Excel Masterfiles
-            </h5>
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 class="mb-0 fw-bold">
+                    <i class="bi bi-file-earmark-excel text-success"></i> Excel Masterfile
+                </h5>
+                {% if has_excel_template %}
+                <span class="badge bg-success">
+                    <i class="bi bi-check-circle"></i> Template Uploaded
+                </span>
+                {% else %}
+                <span class="badge bg-warning text-dark">
+                    <i class="bi bi-exclamation-triangle"></i> No Template
+                </span>
+                {% endif %}
+            </div>
         </div>
         <div class="card-body">
-            {% if reports and reports.excel_files %}
-                <div class="list-group">
-                    {% for excel in reports.excel_files %}
-                    <div class="list-group-item d-flex justify-content-between align-items-center">
-                        <div>
-                            <h6 class="mb-1">
-                                <i class="bi bi-file-earmark-excel text-success"></i>
-                                Version {{ excel.version }}
-                                {% if excel.version == 1 %}
-                                    <span class="badge bg-secondary">Original</span>
-                                {% endif %}
-                            </h6>
-                            <small class="text-muted">
-                                Created: {{ excel.created_at|datetime }}
-                            </small>
-                        </div>
-                        <div class="btn-group" role="group">
-                            <a href="{{ url_for('reports.download_excel', work_id=work['id'] if work is mapping else work.id, version=excel.version) }}" 
-                               class="btn btn-success">
-                                <i class="bi bi-download"></i> Download
-                            </a>
-                            <a href="{{ url_for('reports.edit_excel', work_id=work['id'] if work is mapping else work.id, version=excel.version) }}" 
-                               class="btn btn-outline-primary">
-                                <i class="bi bi-pencil"></i> Edit Data
-                            </a>
-                        </div>
-                    </div>
-                    {% endfor %}
+            <!-- Step 1: Upload Template -->
+            <div class="mb-4 pb-4 border-bottom">
+                <h6 class="text-muted mb-3">
+                    <span class="badge bg-primary">1</span> Upload Excel Template
+                </h6>
+                {% if has_excel_template %}
+                <div class="alert alert-success mb-3">
+                    <i class="bi bi-check-circle-fill"></i> Template already uploaded. You can replace it by uploading a new one.
                 </div>
-            {% else %}
+                {% endif %}
+                <form method="POST" action="{{ url_for('reports.upload_excel_template', work_id=work['id'] if work is mapping else work.id) }}" enctype="multipart/form-data" class="row g-3">
+                    <div class="col-md-8">
+                        <input type="file" name="file" class="form-control" accept=".xlsx" required>
+                        <small class="form-text text-muted">Upload your Excel masterfile template (.xlsx)</small>
+                    </div>
+                    <div class="col-md-4">
+                        <button type="submit" class="btn btn-success w-100">
+                            <i class="bi bi-upload"></i> Upload Template
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Step 2: Generate Reports -->
+            <div class="mb-4 pb-4 border-bottom">
+                <h6 class="text-muted mb-3">
+                    <span class="badge bg-primary">2</span> Generate Excel Reports
+                </h6>
+                {% if not has_excel_template %}
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle"></i> Please upload an Excel template first before generating reports.
+                </div>
+                {% endif %}
+                <form method="POST" action="{{ url_for('reports.generate_excel_report', work_id=work['id'] if work is mapping else work.id) }}">
+                    <button type="submit" class="btn btn-primary" {% if not has_excel_template %}disabled{% endif %}>
+                        <i class="bi bi-file-earmark-plus"></i> Generate New Excel Report
+                    </button>
+                    <small class="form-text text-muted d-block mt-2">
+                        This will create a new version (v{{ excel_reports|length + 1 }}) with the latest extracted data.
+                    </small>
+                </form>
+            </div>
+
+            <!-- Step 3: Download Reports -->
+            <div>
+                <h6 class="text-muted mb-3">
+                    <span class="badge bg-primary">3</span> Generated Excel Reports
+                </h6>
+                {% if excel_reports and excel_reports|length > 0 %}
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Version</th>
+                                <th>File Type</th>
+                                <th>Created At</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for report in excel_reports|reverse %}
+                            <tr>
+                                <td>
+                                    <strong>Version {{ report.version }}</strong>
+                                    {% if loop.first %}
+                                        <span class="badge bg-primary ms-2">Latest</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <i class="bi bi-file-earmark-excel text-success"></i> Excel
+                                </td>
+                                <td>
+                                    <small class="text-muted">
+                                        <i class="bi bi-calendar"></i> {{ report.created_at|datetime if report.created_at else 'N/A' }}
+                                    </small>
+                                </td>
+                                <td>
+                                    <a href="{{ url_for('reports.download_report', work_id=work['id'] if work is mapping else work.id, file_id=report.file_id) }}" 
+                                       class="btn btn-success btn-sm">
+                                        <i class="bi bi-download"></i> Download
+                                    </a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
                 <div class="text-center py-4">
                     <i class="bi bi-file-earmark-excel text-muted" style="font-size: 3rem;"></i>
                     <p class="text-muted mt-3 mb-0">
-                        No Excel files available yet. 
-                        <a href="{{ url_for('extract.index') }}">Start an extraction</a> to generate reports.
+                        No Excel reports generated yet. Click "Generate New Excel Report" above.
                     </p>
                 </div>
-            {% endif %}
+                {% endif %}
+            </div>
         </div>
     </div>
 
-    <!-- PowerPoint Files Section -->
+    <!-- SECTION 2: POWERPOINT TEMPLATE & REPORTS -->
     <div class="card border-0 shadow-sm">
-        <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
-            <h5 class="mb-0 fw-bold">
-                <i class="bi bi-file-earmark-ppt text-danger"></i> PowerPoint Presentations
-            </h5>
-            <form method="POST" action="{{ url_for('reports.generate_powerpoint', work_id=work['id'] if work is mapping else work.id) }}">
-                <button type="submit" class="btn btn-primary btn-sm">
-                    <i class="bi bi-plus-circle"></i> Generate New PPT
-                </button>
-            </form>
+        <div class="card-header bg-white py-3">
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 class="mb-0 fw-bold">
+                    <i class="bi bi-file-earmark-ppt text-danger"></i> PowerPoint Presentation
+                </h5>
+                {% if has_ppt_template %}
+                <span class="badge bg-success">
+                    <i class="bi bi-check-circle"></i> Template Uploaded
+                </span>
+                {% else %}
+                <span class="badge bg-warning text-dark">
+                    <i class="bi bi-exclamation-triangle"></i> No Template
+                </span>
+                {% endif %}
+            </div>
         </div>
         <div class="card-body">
-            {% if reports and reports.powerpoint_files %}
-                <div class="list-group">
-                    {% for ppt in reports.powerpoint_files %}
-                    <div class="list-group-item d-flex justify-content-between align-items-center">
-                        <div>
-                            <h6 class="mb-1">
-                                <i class="bi bi-file-earmark-ppt text-danger"></i>
-                                Version {{ ppt.version }}
-                            </h6>
-                            <small class="text-muted">
-                                Created: {{ ppt.created_at|datetime }}
-                            </small>
-                        </div>
-                        <div class="btn-group" role="group">
-                            <a href="{{ url_for('reports.download_powerpoint', work_id=work['id'] if work is mapping else work.id, version=ppt.version) }}" 
-                               class="btn btn-danger">
-                                <i class="bi bi-download"></i> Download
-                            </a>
-                        </div>
-                    </div>
-                    {% endfor %}
+            <!-- Step 1: Upload Template -->
+            <div class="mb-4 pb-4 border-bottom">
+                <h6 class="text-muted mb-3">
+                    <span class="badge bg-danger">1</span> Upload PowerPoint Template
+                </h6>
+                {% if has_ppt_template %}
+                <div class="alert alert-success mb-3">
+                    <i class="bi bi-check-circle-fill"></i> Template already uploaded. You can replace it by uploading a new one.
                 </div>
-            {% else %}
+                {% endif %}
+                <form method="POST" action="{{ url_for('reports.upload_powerpoint_template', work_id=work['id'] if work is mapping else work.id) }}" enctype="multipart/form-data" class="row g-3">
+                    <div class="col-md-8">
+                        <input type="file" name="file" class="form-control" accept=".pptx" required>
+                        <small class="form-text text-muted">Upload your PowerPoint template (.pptx)</small>
+                    </div>
+                    <div class="col-md-4">
+                        <button type="submit" class="btn btn-danger w-100">
+                            <i class="bi bi-upload"></i> Upload Template
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Step 2: Generate Reports -->
+            <div class="mb-4 pb-4 border-bottom">
+                <h6 class="text-muted mb-3">
+                    <span class="badge bg-danger">2</span> Generate PowerPoint Reports
+                </h6>
+                {% if not has_ppt_template %}
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle"></i> Please upload a PowerPoint template first before generating reports.
+                </div>
+                {% endif %}
+                <form method="POST" action="{{ url_for('reports.generate_powerpoint', work_id=work['id'] if work is mapping else work.id) }}">
+                    <button type="submit" class="btn btn-danger" {% if not has_ppt_template %}disabled{% endif %}>
+                        <i class="bi bi-file-earmark-plus"></i> Generate New PowerPoint
+                    </button>
+                    <small class="form-text text-muted d-block mt-2">
+                        This will create a new version (v{{ ppt_reports|length + 1 }}) with the latest extracted data.
+                    </small>
+                </form>
+            </div>
+
+            <!-- Step 3: Download Reports -->
+            <div>
+                <h6 class="text-muted mb-3">
+                    <span class="badge bg-danger">3</span> Generated PowerPoint Reports
+                </h6>
+                {% if ppt_reports and ppt_reports|length > 0 %}
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Version</th>
+                                <th>File Type</th>
+                                <th>Created At</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for report in ppt_reports|reverse %}
+                            <tr>
+                                <td>
+                                    <strong>Version {{ report.version }}</strong>
+                                    {% if loop.first %}
+                                        <span class="badge bg-primary ms-2">Latest</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <i class="bi bi-file-earmark-ppt text-danger"></i> PowerPoint
+                                </td>
+                                <td>
+                                    <small class="text-muted">
+                                        <i class="bi bi-calendar"></i> {{ report.created_at|datetime if report.created_at else 'N/A' }}
+                                    </small>
+                                </td>
+                                <td>
+                                    <a href="{{ url_for('reports.download_report', work_id=work['id'] if work is mapping else work.id, file_id=report.file_id) }}" 
+                                       class="btn btn-danger btn-sm">
+                                        <i class="bi bi-download"></i> Download
+                                    </a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
                 <div class="text-center py-4">
                     <i class="bi bi-file-earmark-ppt text-muted" style="font-size: 3rem;"></i>
                     <p class="text-muted mt-3 mb-0">
-                        No PowerPoint presentations available. Click "Generate New PPT" to create one.
+                        No PowerPoint reports generated yet. Click "Generate New PowerPoint" above.
                     </p>
                 </div>
-            {% endif %}
+                {% endif %}
+            </div>
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .badge-lg {
+        font-size: 1rem;
+        padding: 0.5rem 1rem;
+    }
+    
+    .border-bottom {
+        border-color: #dee2e6 !important;
+    }
+    
+    .table-hover tbody tr:hover {
+        background-color: rgba(0, 123, 255, 0.05);
+    }
+    
+    [data-theme="dark"] .card-header {
+        background-color: #2d3748 !important;
+    }
+    
+    [data-theme="dark"] .border-bottom {
+        border-color: #4a5568 !important;
+    }
+</style>
 {% endblock %}

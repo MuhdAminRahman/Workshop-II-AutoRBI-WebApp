@@ -132,6 +132,9 @@ class ExtractionStatusResponse(BaseModel):
     error_message: Optional[str] = None
     """Error message if failed"""
     
+    equipment_count: Optional[int] = None
+    """Number of equipment extracted"""
+    
     created_at: datetime
     """When extraction started"""
     

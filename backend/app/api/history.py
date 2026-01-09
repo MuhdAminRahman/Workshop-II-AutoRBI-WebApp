@@ -4,6 +4,7 @@ from sqlalchemy import desc
 from datetime import datetime, timedelta
 from typing import Optional
 from pydantic import BaseModel
+import logging
 from app.models.activity import Activity, EntityType, ActivityAction
 from app.models.work import Work
 from app.models.equipment import Equipment
@@ -11,6 +12,7 @@ from app.db.database import get_db
 
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 # ============================================================================
@@ -28,6 +30,19 @@ class ActivityResponse(BaseModel):
     
     class Config:
         from_attributes = True
+    
+    @classmethod
+    def from_activity(cls, activity: Activity):
+        """Safely convert Activity model to response"""
+        return cls(
+            id=activity.id,
+            user_id=activity.user_id,
+            entity_type=activity.entity_type,
+            entity_id=activity.entity_id,
+            action=activity.action,
+            data=activity.data,
+            created_at=activity.created_at
+        )
 
 
 class UserHistoryResponse(BaseModel):
@@ -80,7 +95,7 @@ async def get_user_history(
     return UserHistoryResponse(
         user_id=user_id,
         total_activities=total,
-        activities=[ActivityResponse.from_orm(a) for a in activities]
+        activities=[ActivityResponse.from_activity(a) for a in activities]
     )
 
 
@@ -99,38 +114,81 @@ async def get_work_history(
     - Extractions run
     - All other work-related activities
     """
-    # Verify work exists
-    work = db.query(Work).filter(Work.id == work_id).first()
-    if not work:
-        raise HTTPException(status_code=404, detail="Work not found")
+    try:
+        # Verify work exists
+        work = db.query(Work).filter(Work.id == work_id).first()
+        if not work:
+            raise HTTPException(status_code=404, detail="Work not found")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error verifying work {work_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
     
-    # Get all activities related to this work directly
-    work_activities = db.query(Activity).filter(
-        (Activity.entity_type == EntityType.WORK.value) & (Activity.entity_id == work_id)
-    ).all()
-    
-    # Get equipment IDs for this work
-    equipment = db.query(Equipment).filter(Equipment.work_id == work_id).all()
-    equipment_ids = [e.id for e in equipment]
-    
-    # Get all activities for related equipment and files
-    related_activities = []
-    if equipment_ids:
-        related_activities = db.query(Activity).filter(
-            Activity.entity_id.in_(equipment_ids) |
-            ((Activity.entity_type == EntityType.FILE.value) & (Activity.data.contains({'work_id': work_id}))) |
-            ((Activity.entity_type == EntityType.EXTRACTION.value) & (Activity.data.contains({'work_id': work_id})))
+    try:
+        # Get all activities related to this work directly
+        work_activities = db.query(Activity).filter(
+            (Activity.entity_type == EntityType.WORK.value) & (Activity.entity_id == work_id)
         ).all()
-    
-    # Combine and sort by created_at descending
-    all_activities = work_activities + related_activities
-    all_activities.sort(key=lambda x: x.created_at, reverse=True)
-    
-    return WorkHistoryResponse(
-        work_id=work_id,
-        total_activities=len(all_activities),
-        activities=[ActivityResponse.from_orm(a) for a in all_activities]
-    )
+        
+        # Get equipment IDs for this work
+        equipment = db.query(Equipment).filter(Equipment.work_id == work_id).all()
+        equipment_ids = [e.id for e in equipment]
+        
+        # Get all activities for related equipment and files
+        related_activities = []
+        if equipment_ids:
+            # Get equipment activities
+            equipment_activities = db.query(Activity).filter(
+                Activity.entity_type == EntityType.EQUIPMENT.value,
+                Activity.entity_id.in_(equipment_ids)
+            ).all()
+            related_activities.extend(equipment_activities)
+        
+        # Get file and extraction activities using JSON path
+        # Note: JSON queries work differently on different databases
+        try:
+            file_activities = db.query(Activity).filter(
+                Activity.entity_type == EntityType.FILE.value,
+                Activity.data['work_id'].astext == str(work_id)
+            ).all()
+            related_activities.extend(file_activities)
+        except Exception as json_error:
+            logger.warning(f"JSON query failed for files, using fallback: {str(json_error)}")
+            # Fallback: filter in Python if JSON query fails
+            all_file_activities = db.query(Activity).filter(
+                Activity.entity_type == EntityType.FILE.value
+            ).all()
+            file_activities = [a for a in all_file_activities if a.data and a.data.get('work_id') == work_id]
+            related_activities.extend(file_activities)
+        
+        try:
+            extraction_activities = db.query(Activity).filter(
+                Activity.entity_type == EntityType.EXTRACTION.value,
+                Activity.data['work_id'].astext == str(work_id)
+            ).all()
+            related_activities.extend(extraction_activities)
+        except Exception as json_error:
+            logger.warning(f"JSON query failed for extractions, using fallback: {str(json_error)}")
+            # Fallback: filter in Python if JSON query fails
+            all_extraction_activities = db.query(Activity).filter(
+                Activity.entity_type == EntityType.EXTRACTION.value
+            ).all()
+            extraction_activities = [a for a in all_extraction_activities if a.data and a.data.get('work_id') == work_id]
+            related_activities.extend(extraction_activities)
+        
+        # Combine and sort by created_at descending
+        all_activities = work_activities + related_activities
+        all_activities.sort(key=lambda x: x.created_at, reverse=True)
+        
+        return WorkHistoryResponse(
+            work_id=work_id,
+            total_activities=len(all_activities),
+            activities=[ActivityResponse.from_activity(a) for a in all_activities]
+        )
+    except Exception as e:
+        logger.error(f"Error fetching work history for work_id {work_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch work history: {str(e)}")
 
 
 @router.get("/entity/{entity_type}/{entity_id}", response_model=EntityHistoryResponse)
@@ -154,7 +212,7 @@ async def get_entity_history(
         entity_type=entity_type.value,
         entity_id=entity_id,
         total_activities=len(activities),
-        activities=[ActivityResponse.from_orm(a) for a in activities]
+        activities=[ActivityResponse.from_activity(a) for a in activities]
     )
 
 
@@ -175,7 +233,7 @@ async def get_activities_by_action(
         Activity.action == action.value
     ).order_by(desc(Activity.created_at)).limit(limit).offset(offset).all()
     
-    return [ActivityResponse.from_orm(a) for a in activities]
+    return [ActivityResponse.from_activity(a) for a in activities]
 
 
 @router.get("/period", response_model=list[ActivityResponse])
@@ -193,7 +251,7 @@ async def get_activities_by_period(
         Activity.created_at >= cutoff
     ).order_by(desc(Activity.created_at)).limit(limit).all()
     
-    return [ActivityResponse.from_orm(a) for a in activities]
+    return [ActivityResponse.from_activity(a) for a in activities]
 
 
 # ============================================================================

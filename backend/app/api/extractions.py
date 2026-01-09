@@ -19,6 +19,8 @@ from app.db.database import get_db
 from app.models.user import User
 from app.models.extraction import Extraction, ExtractionStatus
 from app.models.work import Work
+from app.models.equipment import Equipment
+from app.models.activity import Activity, EntityType, ActivityAction
 from app.dependencies import get_current_user
 from app.schemas.extraction import (
     ExtractionStartResponse,
@@ -127,6 +129,21 @@ async def start_extraction(
         
         logger.info(f"Created extraction record {extraction.id}")
         
+        # Log activity
+        activity = Activity(
+            user_id=current_user.id,
+            entity_type=EntityType.EXTRACTION,
+            entity_id=extraction.id,
+            action=ActivityAction.CREATED,
+            data={
+                "work_id": work_id,
+                "filename": file.filename,
+                "status": ExtractionStatus.PENDING
+            }
+        )
+        db.add(activity)
+        db.commit()
+        
         # Step 3: Queue extraction as background task
         if background_tasks:
             logger.info(f"Queuing extraction task for extraction {extraction.id}")
@@ -230,6 +247,12 @@ async def get_extraction_status(
     processed = extraction.processed_pages or 0
     progress_percent = (processed / total * 100) if total > 0 else 0
     
+    # Count equipment for this extraction
+    equipment_count = db.query(Equipment).filter(
+        Equipment.work_id == extraction.work_id,
+        Equipment.extraction_id == extraction.id
+    ).count()
+    
     return ExtractionStatusResponse(
         id=extraction.id,
         work_id=extraction.work_id,
@@ -238,6 +261,7 @@ async def get_extraction_status(
         processed_pages=processed,
         progress_percent=progress_percent,
         error_message=extraction.error_message,
+        equipment_count=equipment_count,
         created_at=extraction.created_at,
         completed_at=extraction.completed_at,
     )

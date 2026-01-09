@@ -143,16 +143,18 @@
                     <option value="14" {% if days == 14 %}selected{% endif %}>14 Days</option>
                     <option value="30" {% if days == 30 %}selected{% endif %}>30 Days</option>
                     <option value="90" {% if days == 90 %}selected{% endif %}>90 Days</option>
-                    <option value="365" {% if days == 365 %}selected{% endif %}>1 Year</option>
                 </select>
             </div>
             <div class="col-md-4">
-                <label class="form-label">Maximum results</label>
-                <select name="limit" class="form-select form-select-sm">
-                    <option value="50" {% if limit == 50 %}selected{% endif %}>50</option>
-                    <option value="100" {% if limit == 100 %}selected{% endif %}>100</option>
-                    <option value="200" {% if limit == 200 %}selected{% endif %}>200</option>
-                    <option value="500" {% if limit == 500 %}selected{% endif %}>500</option>
+                <label class="form-label">Filter by Work</label>
+                <select name="work_id" class="form-select form-select-sm">
+                    <option value="">All Works</option>
+                    {% for work in works %}
+                    <option value="{{ work.id if work is mapping else work['id'] }}" 
+                            {% if selected_work_id == (work.id if work is mapping else work['id']) %}selected{% endif %}>
+                        {{ work.name if work is mapping else work['name'] }}
+                    </option>
+                    {% endfor %}
                 </select>
             </div>
             <div class="col-md-4 d-flex align-items-end">

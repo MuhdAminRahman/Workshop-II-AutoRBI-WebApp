@@ -389,11 +389,16 @@ def work_history():
     
     # Get filter parameters
     days = request.args.get('days', 7, type=int)
-    limit = request.args.get('limit', 100, type=int)
+    work_id = request.args.get('work_id', None, type=int)
     
     # Get activity history from API
     try:
-        response = api.get_work_history(days=days, limit=limit)
+        if work_id:
+            # Get activities for specific work
+            response = api.get_work_activities(work_id=work_id)
+        else:
+            # Get all activities for period
+            response = api.get_work_history(days=days)
         
         if 'error' in response:
             flash(parse_error_message(response), 'danger')
@@ -411,10 +416,15 @@ def work_history():
         activities = []
         total = 0
     
+    # Get list of all works for filtering dropdown
+    works_response = api.get_works()
+    works = works_response.get('works', []) if isinstance(works_response, dict) else []
+    
     return render_template(
         'works/history.html',
         activities=activities,
         days=days,
-        limit=limit,
-        total=total
+        total=total,
+        selected_work_id=work_id,
+        works=works
     )

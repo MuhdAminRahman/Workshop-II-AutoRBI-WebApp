@@ -23,6 +23,9 @@
         </div>
         <div class="btn-group">
             {% if session.user.role != 'Admin' %}
+            <a href="{{ url_for('reports.view_reports', work_id=work.id) }}" class="btn btn-info">
+                <i class="bi bi-file-earmark-text"></i> Generate Reports
+            </a>
             <button type="button" class="btn btn-success" id="saveChangesBtn">
                 <i class="bi bi-save"></i> Save Changes
             </button>
@@ -66,14 +69,6 @@
                         <i class="bi bi-check-circle-fill text-success fs-3"></i>
                         <h4 class="mb-0 mt-2" id="fieldsCorrected">0</h4>
                         <small class="text-muted">Fields Corrected</small>
-                    </div>
-                </div>
-            </div>
-            <div class="mt-3">
-                <div class="progress" style="height: 25px;">
-                    <div id="completionProgress" class="progress-bar bg-success progress-bar-striped" 
-                         role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
-                        <span class="fw-bold">0% Complete</span>
                     </div>
                 </div>
             </div>
@@ -389,6 +384,7 @@ function initializeData() {
         
         originalData[key] = {};
         let emptyFields = 0;
+        let filledFields = 0;
         
         row.querySelectorAll('.editable-field').forEach(field => {
             const fieldName = field.dataset.field;
@@ -397,10 +393,13 @@ function initializeData() {
             
             if (!value) {
                 emptyFields++;
+            } else {
+                filledFields++;
             }
         });
         
         correctionStats.totalFieldsToFill += emptyFields;
+        correctionStats.fieldsCorrected += filledFields; // Count already filled fields
         correctionStats.totalComponents++;
     });
 }
@@ -521,16 +520,6 @@ function updateStatistics() {
     document.getElementById('totalComponents').textContent = correctionStats.totalComponents;
     document.getElementById('fieldsToFill').textContent = correctionStats.totalFieldsToFill;
     document.getElementById('fieldsCorrected').textContent = correctionStats.fieldsCorrected;
-    
-    // Update progress bar
-    const percentage = correctionStats.totalFieldsToFill > 0 
-        ? Math.round((correctionStats.fieldsCorrected / correctionStats.totalFieldsToFill) * 100)
-        : 0;
-    
-    const progressBar = document.getElementById('completionProgress');
-    progressBar.style.width = percentage + '%';
-    progressBar.setAttribute('aria-valuenow', percentage);
-    progressBar.innerHTML = `<span class="fw-bold">${percentage}% Complete</span>`;
 }
 
 function saveChanges() {

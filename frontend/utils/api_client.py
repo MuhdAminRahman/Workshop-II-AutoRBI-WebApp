@@ -237,3 +237,93 @@ class BackendAPI:
     def get_work_history(self, days: int = 7, limit: int = 100) -> Dict:
         """Get work activity history for recent days"""
         return self._get('/api/history/period', params={'days': days, 'limit': limit})
+    
+    # Equipment endpoints
+    def get_equipment_list(self, work_id: int) -> Dict:
+        """Get all equipment for a work"""
+        return self._get(f'/api/equipments/work/{work_id}')
+    
+    def get_equipment_detail(self, equipment_id: int) -> Dict:
+        """Get equipment details with components"""
+        return self._get(f'/api/equipments/{equipment_id}')
+    
+    # Reports - Template Upload
+    def upload_excel_template(self, work_id: int, file) -> Dict:
+        """Upload Excel masterfile template for work"""
+        file.seek(0)
+        files = {
+            'file': (file.filename, file.read(), file.content_type or 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        }
+        return self._post(f'/api/reports/{work_id}/templates/excel', files=files)
+    
+    def upload_powerpoint_template(self, work_id: int, file) -> Dict:
+        """Upload PowerPoint template for work"""
+        file.seek(0)
+        files = {
+            'file': (file.filename, file.read(), file.content_type or 'application/vnd.openxmlformats-officedocument.presentationml.presentation')
+        }
+        return self._post(f'/api/reports/{work_id}/templates/powerpoint', files=files)
+    
+    # Reports - Generation
+    def generate_excel_report(self, work_id: int) -> Dict:
+        """Generate Excel report from extracted data"""
+        return self._post(f'/api/reports/{work_id}/reports/generate-excel')
+    
+    def generate_ppt_report(self, work_id: int) -> Dict:
+        """Generate PowerPoint report from extracted data"""
+        return self._post(f'/api/reports/{work_id}/reports/generate-powerpoint')
+    
+    # Reports - List and Download
+    def get_work_reports(self, work_id: int) -> Dict:
+        """Get all generated reports for a work"""
+        return self._get(f'/api/reports/{work_id}/reports')
+    
+    def download_report(self, work_id: int, file_id: int) -> Dict:
+        """Get download URL for a specific report"""
+        return self._get(f'/api/reports/{work_id}/reports/{file_id}/download')
+    
+    def download_report_file(self, work_id: int, file_id: int) -> bytes:
+        """Download a report file directly"""
+        try:
+            # First get the download URL
+            url_response = self._get(f'/api/reports/{work_id}/reports/{file_id}/download')
+            if 'error' in url_response or 'file_url' not in url_response:
+                return None
+            
+            # Download from Cloudinary URL
+            response = requests.get(url_response['file_url'])
+            response.raise_for_status()
+            return response.content
+        except requests.exceptions.RequestException:
+            return None
+    
+    # Analytics - Using actual backend endpoints
+    def get_extraction_analytics(self, period: str = 'last_30_days') -> Dict:
+        """Get extraction status metrics for analytics dashboard"""
+        return self._get('/api/analytics/extractions/status', params={'period': period})
+    
+    def get_works_status(self, period: str = 'last_30_days') -> Dict:
+        """Get works status metrics"""
+        return self._get('/api/analytics/works/status', params={'period': period})
+    
+    def get_equipment_count(self, period: str = 'last_30_days') -> Dict:
+        """Get equipment count metrics"""
+        return self._get('/api/analytics/equipment/count', params={'period': period})
+    
+    def get_components_count(self, period: str = 'last_30_days') -> Dict:
+        """Get components count metrics"""
+        return self._get('/api/analytics/components/count', params={'period': period})
+    
+    # Extraction status (individual)
+    def get_extraction_status(self, extraction_id: int) -> Dict:
+        """Get individual extraction progress and status"""
+        return self._get(f'/api/extractions/{extraction_id}/status')
+    
+    # History - Activity logs (using actual backend endpoints)
+    def get_work_history(self, days: int = 7) -> Dict:
+        """Get work activity history for recent days"""
+        return self._get('/api/history/period', params={'days': days})
+    
+    def get_work_activities(self, work_id: int) -> Dict:
+        """Get activity logs for a specific work"""
+        return self._get(f'/api/history/work/{work_id}')

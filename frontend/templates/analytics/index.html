@@ -12,50 +12,118 @@
         <p class="text-muted">View insights and metrics for your work projects</p>
     </div>
 
+    <!-- Overview Statistics -->
+    <div class="row g-4 mb-4">
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body text-center">
+                    <i class="bi bi-folder2-open text-primary" style="font-size: 2.5rem;"></i>
+                    <h3 class="mt-3 mb-1">{{ works|length }}</h3>
+                    <p class="text-muted mb-0">Total Works</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body text-center">
+                    <i class="bi bi-file-earmark-arrow-up text-success" style="font-size: 2.5rem;"></i>
+                    <h3 class="mt-3 mb-1">{{ extraction_stats.total if extraction_stats else 0 }}</h3>
+                    <p class="text-muted mb-0">Total Extractions</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body text-center">
+                    <i class="bi bi-tools text-info" style="font-size: 2.5rem;"></i>
+                    <h3 class="mt-3 mb-1">{{ equipment_count.total if equipment_count else 0 }}</h3>
+                    <p class="text-muted mb-0">Total Equipment</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body text-center">
+                    <i class="bi bi-grid text-warning" style="font-size: 2.5rem;"></i>
+                    <h3 class="mt-3 mb-1">{{ components_count.total if components_count else 0 }}</h3>
+                    <p class="text-muted mb-0">Total Components</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Works List -->
-    <div class="row g-4">
-        {% if works %}
-            {% for work in works %}
-            <div class="col-md-6">
-                <div class="card border-0 shadow-sm h-100">
-                    <div class="card-body">
-                        <div class="d-flex justify-content-between align-items-start mb-3">
-                            <h5 class="card-title mb-0">
-                                <i class="bi bi-folder"></i> {{ work.name }}
-                            </h5>
-                            <span class="badge bg-{{ get_status_badge_class(work.status) }}">
-                                {{ work.status|capitalize }}
-                            </span>
+    <div class="card border-0 shadow-sm">
+        <div class="card-header bg-white py-3">
+            <h5 class="mb-0 fw-bold">
+                <i class="bi bi-folder2"></i> Work Projects
+            </h5>
+        </div>
+        <div class="card-body">
+            <div class="row g-4">
+                {% if works %}
+                    {% for work in works %}
+                    <div class="col-md-6">
+                        <div class="card border h-100 hover-shadow">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-start mb-3">
+                                    <h5 class="card-title mb-0">
+                                        <i class="bi bi-folder"></i> {{ work.name if work is mapping else work['name'] }}
+                                    </h5>
+                                    <span class="badge bg-{{ (work.status if work is mapping else work['status'])|default('active')|lower == 'active' and 'success' or 'secondary' }}">
+                                        {{ (work.status if work is mapping else work['status'])|default('Active')|capitalize }}
+                                    </span>
+                                </div>
+                                <p class="card-text text-muted">
+                                    {% set desc = work.description if work is mapping else work['description'] %}
+                                    {{ desc[:100] if desc }}{% if desc and desc|length > 100 %}...{% endif %}
+                                </p>
+                                <div class="d-grid">
+                                    <a href="{{ url_for('analytics.view_analytics', work_id=work.id if work is mapping else work['id']) }}" 
+                                       class="btn btn-primary">
+                                        <i class="bi bi-graph-up"></i> View Analytics
+                                    </a>
+                                </div>
+                            </div>
+                            <div class="card-footer bg-white text-muted">
+                                <small>
+                                    <i class="bi bi-calendar"></i> Created: {{ (work.created_at if work is mapping else work['created_at'])|datetime if (work.created_at if work is mapping else work.get('created_at')) else 'N/A' }}
+                                </small>
+                            </div>
                         </div>
-                        <p class="card-text text-muted">
-                            {{ work.description[:100] }}{% if work.description and work.description|length > 100 %}...{% endif %}
-                        </p>
-                        <div class="d-grid gap-2">
-                            <a href="{{ url_for('analytics.view_analytics', work_id=work.id) }}" 
-                               class="btn btn-primary">
-                                <i class="bi bi-graph-up"></i> View Analytics
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="col-12">
+                        <div class="text-center py-5">
+                            <i class="bi bi-inbox text-muted" style="font-size: 4rem;"></i>
+                            <p class="text-muted mt-3 mb-4">No works found. Create a work project first!</p>
+                            <a href="{{ url_for('works.list_works') }}" class="btn btn-primary">
+                                <i class="bi bi-plus-circle"></i> Create Work
                             </a>
                         </div>
                     </div>
-                    <div class="card-footer bg-white text-muted">
-                        <small>
-                            <i class="bi bi-calendar"></i> Created: {{ work.created_at|datetime }}
-                        </small>
-                    </div>
-                </div>
+                {% endif %}
             </div>
-            {% endfor %}
-        {% else %}
-            <div class="col-12">
-                <div class="text-center py-5">
-                    <i class="bi bi-inbox text-muted" style="font-size: 4rem;"></i>
-                    <p class="text-muted mt-3 mb-4">No works found. Create a work project first!</p>
-                    <a href="{{ url_for('works.list_works') }}" class="btn btn-primary">
-                        <i class="bi bi-plus-circle"></i> Create Work
-                    </a>
-                </div>
-            </div>
-        {% endif %}
+        </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .hover-shadow {
+        transition: box-shadow 0.3s ease;
+    }
+    .hover-shadow:hover {
+        box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15) !important;
+    }
+    .stat-box {
+        background: #f8f9fa;
+        border-radius: 8px;
+    }
+    [data-theme="dark"] .stat-box {
+        background: #2d3748;
+    }
+</style>
 {% endblock %}
