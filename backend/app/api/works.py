@@ -632,7 +632,7 @@ async def list_collaborators(
                 user_id=c.user_id,
                 email=c.user.email,
                 full_name=c.user.full_name or "",
-                role=c.role.value,
+                role=c.role,
             )
             for c in collaborators
         ]
