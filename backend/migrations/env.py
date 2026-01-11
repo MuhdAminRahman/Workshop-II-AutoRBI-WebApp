@@ -12,6 +12,7 @@ from app.models.base import Base
 # Import all models so Alembic can detect them
 from app.models.user import User
 from app.models.work import Work
+from app.models.work_collaborator import WorkCollaborator
 from app.models.equipment import Equipment
 from app.models.component import Component
 from app.models.extraction import Extraction

@@ -1,12 +1,8 @@
 """
-Extraction Routes - UPDATED
+Extraction Routes - Updated for multi-user collaboration
 POST /api/works/{workId}/extraction/start - Start extraction
 GET /api/extractions/{extractionId}/status - Get status
 WS /api/ws/extractions/{extractionId} - Real-time progress
-
-CHANGES FROM ORIGINAL:
-- Added pdf_filename parameter to run_extraction() call
-- No other changes needed
 """
 
 import logging
@@ -28,7 +24,7 @@ from app.services.extraction_service import (
     run_extraction,
     get_extraction_progress,
 )
-from app.services.work_service import verify_work_ownership
+from app.services.permission_service import can_view, can_edit
 from app.utils.cloudinary_util import upload_pdf_to_cloudinary
 
 logger = logging.getLogger(__name__)
@@ -60,6 +56,7 @@ async def start_extraction(
 ) -> ExtractionStartResponse:
     """
     Start a new extraction job.
+    Requires edit permission on work.
     
     Args:
         work_id: Work project ID
@@ -73,6 +70,7 @@ async def start_extraction(
     
     Raises:
         HTTPException 404: If work not found
+        HTTPException 403: If no edit permission
         HTTPException 422: If file type is wrong
         HTTPException 400: If upload/creation fails
     
@@ -81,20 +79,20 @@ async def start_extraction(
         Content-Type: multipart/form-data
         
         file: <binary PDF data>
-        
-        Response (202 Accepted):
-        {
-            "extraction_id": 5,
-            "work_id": 1,
-            "status": "pending",
-            "message": "Extraction started..."
-        }
     """
     logger.info(f"Starting extraction for work {work_id} by user {current_user.username}")
     
-    # Verify work exists and belongs to user
-    if not verify_work_ownership(db=db, work_id=work_id, user_id=current_user.id):
+    # ✅ NEW: Permission check - require edit permission
+    if not can_edit(db, work_id, current_user.id):
         logger.warning(f"User {current_user.username} tried to extract unauthorized work {work_id}")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Work not found",
+        )
+    
+    # Verify work exists
+    work = db.query(Work).filter(Work.id == work_id).first()
+    if not work:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Work not found",
@@ -135,7 +133,7 @@ async def start_extraction(
                 work_id=work_id,
                 extraction_id=extraction.id,
                 pdf_url=pdf_url,
-                pdf_filename=file.filename,  # ✅ ADD THIS LINE - passes filename to service
+                pdf_filename=file.filename,
             )
         
         return ExtractionStartResponse(
@@ -175,6 +173,7 @@ async def get_extraction_status(
 ) -> ExtractionStatusResponse:
     """
     Get extraction job status and progress.
+    Requires view permission on the extraction's work.
     
     Args:
         extraction_id: Extraction job ID
@@ -186,21 +185,10 @@ async def get_extraction_status(
     
     Raises:
         HTTPException 404: If extraction not found
-        HTTPException 403: If user doesn't own the work
+        HTTPException 403: If no view permission
     
     Example:
         GET /api/extractions/5/status
-        
-        Response:
-        {
-            "id": 5,
-            "work_id": 1,
-            "status": "in_progress",
-            "total_pages": 10,
-            "processed_pages": 3,
-            "progress_percent": 30,
-            "error_message": null
-        }
     """
     logger.info(f"Getting status for extraction {extraction_id}")
     
@@ -216,9 +204,8 @@ async def get_extraction_status(
             detail="Extraction not found",
         )
     
-    # Verify user owns the work
-    work = db.query(Work).filter(Work.id == extraction.work_id).first()
-    if not work or work.user_id != current_user.id:
+    # ✅ NEW: Permission check - require view permission on the work
+    if not can_view(db, extraction.work_id, current_user.id):
         logger.warning(f"User {current_user.username} tried to access unauthorized extraction {extraction_id}")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -257,6 +244,7 @@ async def websocket_extraction_progress(
 ):
     """
     WebSocket endpoint for real-time extraction progress.
+    Requires view permission on the extraction's work.
     
     Connect and receive real-time progress updates as the extraction runs.
     
@@ -295,6 +283,18 @@ async def websocket_extraction_progress(
     if not extraction:
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Extraction not found")
         logger.warning(f"WebSocket: Extraction {extraction_id} not found")
+        return
+    
+    # ✅ NEW: Permission check on WebSocket
+    # Note: Permission check for WebSocket is simplified - in production, validate token properly
+    from app.services.auth_service import decode_access_token
+    user_id = None
+    if token:
+        user_id = decode_access_token(token)
+    
+    if not user_id or not can_view(db, extraction.work_id, user_id):
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Access denied")
+        logger.warning(f"WebSocket: Access denied for extraction {extraction_id}")
         return
     
     await websocket.accept()
@@ -378,12 +378,14 @@ Extraction Routes:
    - Create Extraction record
    - Queue background task with pdf_filename
    - Response: ExtractionStartResponse (202 Accepted)
-   - Status: 202 Accepted or 400/404/422
+   - Status: 202 Accepted or 400/404/422/403
+   - Permission: edit
 
 2. GET /api/extractions/{extractionId}/status
    - Poll extraction status
    - Response: ExtractionStatusResponse
    - Status: 200 OK or 404/403
+   - Permission: view
 
 3. WebSocket /api/ws/extractions/{extractionId}
    - Real-time progress updates
@@ -391,6 +393,7 @@ Extraction Routes:
      - Progress: {type: "progress", page, total, percent}
      - Completed: {type: "completed", message, ...}
      - Error: {type: "error", message}
+   - Permission: view
 
 All routes require authentication (Bearer token)
 """
