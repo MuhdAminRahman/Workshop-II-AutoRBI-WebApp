@@ -281,7 +281,6 @@ async def list_user_works(
     # Filter by owner (user has OWNER role on work)
     query = db.query(Work).join(WorkCollaborator).filter(
         WorkCollaborator.user_id == user_id,
-        WorkCollaborator.role == CollaboratorRole.OWNER
     )
     
     if status:
