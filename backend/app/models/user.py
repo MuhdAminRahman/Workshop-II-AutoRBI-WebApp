@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Enum as SQLEnum
+from sqlalchemy import Column, Integer, String, Enum as SQLEnum, Boolean
 from sqlalchemy.orm import relationship
 from app.models.base import BaseModel
 import enum
@@ -15,6 +15,7 @@ class User(BaseModel):
     password_hash = Column(String(255), nullable=False)
     full_name = Column(String(100))
     role = Column(SQLEnum(UserRole), default=UserRole.ENGINEER, nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False, index=True)
     
     # Relationships
     works = relationship("Work", back_populates="user", cascade="all, delete-orphan")
