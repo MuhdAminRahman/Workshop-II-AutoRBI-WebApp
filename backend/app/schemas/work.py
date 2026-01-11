@@ -162,6 +162,25 @@ class FileVersionResponse(BaseModel):
         from_attributes = True
 
 
+class CollaboratorInfo(BaseModel):
+    """Collaborator information in work response"""
+    
+    user_id: int
+    """User ID"""
+    
+    email: str
+    """User email"""
+    
+    full_name: Optional[str]
+    """User full name"""
+    
+    role: str
+    """Collaborator role: owner, editor, viewer"""
+    
+    class Config:
+        from_attributes = True
+
+
 class WorkResponse(BaseModel):
     """Complete work data response"""
     
@@ -186,9 +205,6 @@ class WorkResponse(BaseModel):
     created_at: datetime
     """When work was created"""
     
-    user_id: int
-    """Owner user ID"""
-    
     class Config:
         from_attributes = True
         example = {
@@ -198,8 +214,7 @@ class WorkResponse(BaseModel):
             "status": "active",
             "excel_masterfile_url": "https://res.cloudinary.com/...",
             "ppt_template_url": "https://res.cloudinary.com/...",
-            "created_at": "2024-01-15T10:30:00",
-            "user_id": 1
+            "created_at": "2024-01-15T10:30:00"
         }
 
 
@@ -215,6 +230,9 @@ class WorkDetailResponse(BaseModel):
     files: List[FileVersionResponse] = []
     """List of generated files (Excel, PPT versions)"""
     
+    collaborators: List[CollaboratorInfo] = []
+    """List of collaborators on this work"""
+    
     class Config:
         example = {
             "work": {
@@ -224,8 +242,7 @@ class WorkDetailResponse(BaseModel):
                 "status": "active",
                 "excel_masterfile_url": "https://res.cloudinary.com/...",
                 "ppt_template_url": "https://res.cloudinary.com/...",
-                "created_at": "2024-01-15T10:30:00",
-                "user_id": 1
+                "created_at": "2024-01-15T10:30:00"
             },
             "equipment": [
                 {
@@ -237,7 +254,15 @@ class WorkDetailResponse(BaseModel):
                     "components": []
                 }
             ],
-            "files": []
+            "files": [],
+            "collaborators": [
+                {
+                    "user_id": 1,
+                    "email": "owner@example.com",
+                    "full_name": "John Owner",
+                    "role": "owner"
+                }
+            ]
         }
 
 

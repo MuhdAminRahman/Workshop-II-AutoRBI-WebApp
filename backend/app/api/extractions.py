@@ -231,7 +231,7 @@ async def get_extraction_status(
 
 
 # ============================================================================
-# WEBSOCKET - REAL-TIME PROGRESS
+# WEBSOCKET - REAL-TIME PROGRESS (FIXED VERSION)
 # ============================================================================
 
 
@@ -285,16 +285,31 @@ async def websocket_extraction_progress(
         logger.warning(f"WebSocket: Extraction {extraction_id} not found")
         return
     
-    # ✅ NEW: Permission check on WebSocket
-    # Note: Permission check for WebSocket is simplified - in production, validate token properly
-    from app.services.auth_service import decode_access_token
+    # ✓ FIXED: Proper token validation and permission check
     user_id = None
     if token:
-        user_id = decode_access_token(token)
-    
-    if not user_id or not can_view(db, extraction.work_id, user_id):
-        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Access denied")
-        logger.warning(f"WebSocket: Access denied for extraction {extraction_id}")
+        try:
+            from app.services.auth_service import decode_access_token
+            user_id = decode_access_token(token)  # ✓ Returns int or None, not tuple
+            
+            if user_id is None:
+                await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Invalid token")
+                logger.warning(f"WebSocket: Invalid token for extraction {extraction_id}")
+                return
+            
+            # ✓ Check permission to view the work
+            if not can_view(db, extraction.work_id, user_id):
+                await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Access denied")
+                logger.warning(f"WebSocket: User {user_id} denied access to extraction {extraction_id}")
+                return
+            
+        except Exception as e:
+            logger.warning(f"WebSocket: Token validation error: {str(e)}")
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Invalid token")
+            return
+    else:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Missing token")
+        logger.warning(f"WebSocket: No token provided for extraction {extraction_id}")
         return
     
     await websocket.accept()
