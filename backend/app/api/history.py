@@ -7,7 +7,10 @@ from pydantic import BaseModel
 from app.models.activity import Activity, EntityType, ActivityAction
 from app.models.work import Work
 from app.models.equipment import Equipment
+from app.models.user import User
 from app.db.database import get_db
+from app.dependencies import get_current_user
+from app.services.permission_service import can_view
 
 
 router = APIRouter()
@@ -87,10 +90,12 @@ async def get_user_history(
 @router.get("/work/{work_id}", response_model=WorkHistoryResponse)
 async def get_work_history(
     work_id: int,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
     Get complete history of a work and all related entities.
+    Requires view permission on work.
     
     Includes:
     - Work status changes
@@ -99,6 +104,10 @@ async def get_work_history(
     - Extractions run
     - All other work-related activities
     """
+    # ✅ NEW: Permission check
+    if not can_view(db, work_id, current_user.id):
+        raise HTTPException(status_code=403, detail="You don't have access to this work")
+    
     # Verify work exists
     work = db.query(Work).filter(Work.id == work_id).first()
     if not work:

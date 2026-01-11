@@ -1,5 +1,5 @@
 """
-Reports API Routes - FINAL VERSION
+Reports API Routes - Updated for multi-user collaboration
 Users upload templates to work, then generate reports from them
 
 POST /api/works/{workId}/templates/excel - Upload Excel template
@@ -20,6 +20,7 @@ from app.models.work import Work
 from app.models.file import File as FileModel, FileType
 from app.dependencies import get_current_user
 from app.services.reports_service import generate_excel_report, generate_powerpoint_report
+from app.services.permission_service import can_view, can_edit
 from app.utils.cloudinary_util import upload_excel_to_cloudinary, upload_ppt_to_cloudinary
 
 logger = logging.getLogger(__name__)
@@ -45,6 +46,7 @@ async def upload_excel_template(
 ):
     """
     Upload Excel Masterfile template for work.
+    Requires edit permission on work.
     
     Stores template URL in Work record for later use in report generation.
     
@@ -65,11 +67,15 @@ async def upload_excel_template(
     try:
         logger.info(f"User {current_user.username} uploading Excel template for work {work_id}")
         
-        # Verify work exists and belongs to user
-        work = db.query(Work).filter(
-            Work.id == work_id,
-            Work.user_id == current_user.id
-        ).first()
+        # ✅ NEW: Permission check
+        if not can_edit(db, work_id, current_user.id):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Work not found"
+            )
+        
+        # Verify work exists
+        work = db.query(Work).filter(Work.id == work_id).first()
         
         if not work:
             raise HTTPException(
@@ -129,6 +135,7 @@ async def upload_powerpoint_template(
 ):
     """
     Upload PowerPoint template for work.
+    Requires edit permission on work.
     
     Stores template URL in Work record for later use in report generation.
     
@@ -149,11 +156,15 @@ async def upload_powerpoint_template(
     try:
         logger.info(f"User {current_user.username} uploading PowerPoint template for work {work_id}")
         
-        # Verify work exists and belongs to user
-        work = db.query(Work).filter(
-            Work.id == work_id,
-            Work.user_id == current_user.id
-        ).first()
+        # ✅ NEW: Permission check
+        if not can_edit(db, work_id, current_user.id):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Work not found"
+            )
+        
+        # Verify work exists
+        work = db.query(Work).filter(Work.id == work_id).first()
         
         if not work:
             raise HTTPException(
@@ -216,6 +227,7 @@ async def generate_excel(
 ):
     """
     Generate Excel report from extracted equipment data.
+    Requires edit permission on work.
     
     Requires Excel template to be uploaded first.
     Auto-generates as v1, user can regenerate as v2, v3, etc.
@@ -238,11 +250,15 @@ async def generate_excel(
     try:
         logger.info(f"User {current_user.username} generating Excel for work {work_id}")
         
-        # Verify work exists and belongs to user
-        work = db.query(Work).filter(
-            Work.id == work_id,
-            Work.user_id == current_user.id
-        ).first()
+        # ✅ NEW: Permission check
+        if not can_edit(db, work_id, current_user.id):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Work not found"
+            )
+        
+        # Verify work exists
+        work = db.query(Work).filter(Work.id == work_id).first()
         
         if not work:
             raise HTTPException(
@@ -332,6 +348,7 @@ async def generate_powerpoint(
 ):
     """
     Generate PowerPoint report from extracted equipment data.
+    Requires edit permission on work.
     
     Requires PowerPoint template to be uploaded first.
     Auto-generates as v1, user can regenerate as v2, v3, etc.
@@ -354,11 +371,15 @@ async def generate_powerpoint(
     try:
         logger.info(f"User {current_user.username} generating PowerPoint for work {work_id}")
         
-        # Verify work exists and belongs to user
-        work = db.query(Work).filter(
-            Work.id == work_id,
-            Work.user_id == current_user.id
-        ).first()
+        # ✅ NEW: Permission check
+        if not can_edit(db, work_id, current_user.id):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Work not found"
+            )
+        
+        # Verify work exists
+        work = db.query(Work).filter(Work.id == work_id).first()
         
         if not work:
             raise HTTPException(
@@ -451,6 +472,7 @@ async def list_reports(
 ):
     """
     List all reports (Excel and PowerPoint) for a work project.
+    Requires view permission on work.
     
     Returns:
         {
@@ -470,11 +492,15 @@ async def list_reports(
     try:
         logger.info(f"User {current_user.username} listing reports for work {work_id}")
         
+        # ✅ NEW: Permission check
+        if not can_view(db, work_id, current_user.id):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Work not found"
+            )
+        
         # Verify work exists
-        work = db.query(Work).filter(
-            Work.id == work_id,
-            Work.user_id == current_user.id
-        ).first()
+        work = db.query(Work).filter(Work.id == work_id).first()
         
         if not work:
             raise HTTPException(
@@ -526,6 +552,7 @@ async def download_report(
 ):
     """
     Download report file.
+    Requires view permission on work.
     
     Returns redirect URL to Cloudinary.
     
@@ -535,11 +562,15 @@ async def download_report(
     try:
         logger.info(f"User {current_user.username} downloading report {file_id}")
         
+        # ✅ NEW: Permission check
+        if not can_view(db, work_id, current_user.id):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Work not found"
+            )
+        
         # Verify work exists
-        work = db.query(Work).filter(
-            Work.id == work_id,
-            Work.user_id == current_user.id
-        ).first()
+        work = db.query(Work).filter(Work.id == work_id).first()
         
         if not work:
             raise HTTPException(

@@ -1,5 +1,5 @@
 """
-Work Service
+Work Service - Updated for multi-user collaboration
 Business logic for work project management
 """
 
@@ -8,8 +8,15 @@ from typing import Optional, List, Tuple
 from sqlalchemy.orm import Session
 
 from app.models.work import Work, WorkStatus
+from app.models.work_collaborator import WorkCollaborator, CollaboratorRole
 from app.models.equipment import Equipment
 from app.models.file import File
+from app.services.permission_service import (
+    can_edit,
+    can_own,
+    get_owner_count,
+    PermissionLevel,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -26,10 +33,11 @@ def create_work(
 ) -> Tuple[Optional[Work], Optional[str]]:
     """
     Create a new work project.
+    Creator automatically becomes owner.
     
     Args:
         db: Database session
-        user_id: Owner user ID
+        user_id: Creator/owner user ID
         name: Project name
         description: Optional description
     
@@ -45,22 +53,28 @@ def create_work(
             name="Refinery Unit A",
             description="Extract equipment data"
         )
-        if error:
-            print(f"Failed: {error}")
     """
     try:
         new_work = Work(
-            user_id=user_id,
             name=name,
             description=description,
             status=WorkStatus.ACTIVE,
         )
         
         db.add(new_work)
+        db.flush()
+        
+        # Creator becomes owner automatically
+        owner_collaborator = WorkCollaborator(
+            work_id=new_work.id,
+            user_id=user_id,
+            role=CollaboratorRole.OWNER
+        )
+        db.add(owner_collaborator)
         db.commit()
         db.refresh(new_work)
         
-        logger.info(f"✅ Work created: {name} (ID: {new_work.id})")
+        logger.info(f"✅ Work created: {name} (ID: {new_work.id}) by user {user_id}")
         
         return new_work, None
     
@@ -78,35 +92,25 @@ def create_work(
 def get_work_by_id(
     db: Session,
     work_id: int,
-    user_id: Optional[int] = None,
 ) -> Optional[Work]:
     """
-    Get work by ID.
+    Get work by ID (no permission check - permission checked by caller).
     
     Args:
         db: Database session
         work_id: Work ID
-        user_id: Optional - if provided, ensure work belongs to this user
     
     Returns:
         Work object or None if not found
     
     Example:
         work = get_work_by_id(db=db, work_id=1)
-        work = get_work_by_id(db=db, work_id=1, user_id=1)  # Verify ownership
     """
-    query = db.query(Work).filter(Work.id == work_id)
-    
-    if user_id is not None:
-        query = query.filter(Work.user_id == user_id)
-    
-    work = query.first()
+    work = db.query(Work).filter(Work.id == work_id).first()
     
     if not work:
-        logger.warning(f"Work not found: ID {work_id}")
+        logger.debug(f"Work not found: ID {work_id}")
         return None
-    
-    logger.debug(f"Retrieved work: {work.name} (ID: {work.id})")
     
     return work
 
@@ -123,7 +127,7 @@ def list_works_for_user(
     limit: int = 100,
 ) -> Tuple[List[Work], int]:
     """
-    List all works for a user.
+    List all works for a user (works they collaborate on).
     
     Args:
         db: Database session
@@ -136,9 +140,10 @@ def list_works_for_user(
     
     Example:
         works, total = list_works_for_user(db=db, user_id=1, skip=0, limit=10)
-        print(f"Found {total} works, returning {len(works)}")
     """
-    query = db.query(Work).filter(Work.user_id == user_id)
+    query = db.query(Work).join(WorkCollaborator).filter(
+        WorkCollaborator.user_id == user_id
+    ).distinct()
     
     total = query.count()
     
@@ -164,11 +169,12 @@ def update_work(
 ) -> Tuple[Optional[Work], Optional[str]]:
     """
     Update a work project.
+    Requires edit permission.
     
     Args:
         db: Database session
         work_id: Work ID
-        user_id: User ID (verify ownership)
+        user_id: User ID (permission check)
         name: New name (optional)
         description: New description (optional)
         status: New status (optional)
@@ -186,10 +192,15 @@ def update_work(
             status="completed"
         )
     """
-    work = get_work_by_id(db=db, work_id=work_id, user_id=user_id)
+    work = get_work_by_id(db=db, work_id=work_id)
     
     if not work:
-        return None, "Work not found or you don't have permission"
+        return None, "Work not found"
+    
+    # ✅ NEW: Permission check
+    if not can_edit(db, work_id, user_id):
+        logger.warning(f"User {user_id} tried to update unauthorized work {work_id}")
+        return None, "You don't have permission to edit this work"
     
     try:
         if name is not None:
@@ -224,11 +235,12 @@ def delete_work(
 ) -> Tuple[bool, Optional[str]]:
     """
     Delete a work project and all related data.
+    Requires owner permission.
     
     Args:
         db: Database session
         work_id: Work ID
-        user_id: User ID (verify ownership)
+        user_id: User ID (permission check)
     
     Returns:
         (success: bool, error_message)
@@ -237,23 +249,22 @@ def delete_work(
     
     Example:
         success, error = delete_work(db=db, work_id=1, user_id=1)
-        if success:
-            print("Work deleted")
     """
-    work = get_work_by_id(db=db, work_id=work_id, user_id=user_id)
+    work = get_work_by_id(db=db, work_id=work_id)
     
     if not work:
-        return False, "Work not found or you don't have permission"
+        return False, "Work not found"
+    
+    # ✅ NEW: Permission check
+    if not can_own(db, work_id, user_id):
+        logger.warning(f"User {user_id} tried to delete unauthorized work {work_id}")
+        return False, "Only owner can delete this work"
     
     try:
-        # Cascade delete handles related records:
-        # - equipment → components
-        # - extractions
-        # - files
         db.delete(work)
         db.commit()
         
-        logger.info(f"✅ Work deleted: {work.name} (ID: {work.id})")
+        logger.info(f"✅ Work deleted: ID {work_id}")
         
         return True, None
     
@@ -277,11 +288,12 @@ def update_work_file_urls(
 ) -> Tuple[Optional[Work], Optional[str]]:
     """
     Update Excel masterfile and PPT template URLs.
+    Requires edit permission.
     
     Args:
         db: Database session
         work_id: Work ID
-        user_id: User ID (verify ownership)
+        user_id: User ID (permission check)
         excel_url: Cloudinary URL to Excel file
         ppt_url: Cloudinary URL to PPT file
     
@@ -293,14 +305,17 @@ def update_work_file_urls(
             db=db,
             work_id=1,
             user_id=1,
-            excel_url="https://res.cloudinary.com/.../masterfile.xlsx",
-            ppt_url="https://res.cloudinary.com/.../template.pptx"
+            excel_url="https://..."
         )
     """
-    work = get_work_by_id(db=db, work_id=work_id, user_id=user_id)
+    work = get_work_by_id(db=db, work_id=work_id)
     
     if not work:
         return None, "Work not found"
+    
+    # ✅ NEW: Permission check
+    if not can_edit(db, work_id, user_id):
+        return None, "You don't have permission to edit this work"
     
     try:
         if excel_url:
@@ -329,18 +344,19 @@ def update_work_file_urls(
 def get_work_equipment_and_files(
     db: Session,
     work_id: int,
-    user_id: Optional[int] = None,
+    user_id: int,
 ) -> Tuple[List[Equipment], List[File]]:
     """
     Get all equipment and files for a work.
+    Requires view permission.
     
     Args:
         db: Database session
         work_id: Work ID
-        user_id: Optional - verify ownership
+        user_id: User ID (permission check)
     
     Returns:
-        (List of Equipment, List of Files)
+        (List of Equipment, List of Files) or ([], []) if no permission
     
     Example:
         equipment, files = get_work_equipment_and_files(
@@ -349,10 +365,15 @@ def get_work_equipment_and_files(
             user_id=1
         )
     """
-    # Verify work exists and belongs to user (if user_id provided)
-    work = get_work_by_id(db=db, work_id=work_id, user_id=user_id)
+    work = get_work_by_id(db=db, work_id=work_id)
     
     if not work:
+        return [], []
+    
+    # ✅ NEW: Permission check (view level)
+    from app.services.permission_service import can_view
+    if not can_view(db, work_id, user_id):
+        logger.warning(f"User {user_id} tried to access unauthorized work {work_id}")
         return [], []
     
     # Get equipment with components
@@ -367,7 +388,7 @@ def get_work_equipment_and_files(
 
 
 # ============================================================================
-# HELPER: Check work ownership
+# HELPER: Check if user can access work
 # ============================================================================
 
 
@@ -377,7 +398,10 @@ def verify_work_ownership(
     user_id: int,
 ) -> bool:
     """
-    Verify that a work belongs to a user.
+    ⚠️ DEPRECATED: Use permission_service.can_view/can_edit/can_own instead.
+    
+    This function is kept for backward compatibility.
+    It checks if user has ANY permission on the work (view level).
     
     Args:
         db: Database session
@@ -385,15 +409,7 @@ def verify_work_ownership(
         user_id: User ID
     
     Returns:
-        True if user owns the work, False otherwise
-    
-    Example:
-        if verify_work_ownership(db=db, work_id=1, user_id=1):
-            print("User owns this work")
+        True if user is collaborator, False otherwise
     """
-    work = db.query(Work).filter(
-        Work.id == work_id,
-        Work.user_id == user_id
-    ).first()
-    
-    return work is not None
+    from app.services.permission_service import can_view
+    return can_view(db, work_id, user_id)

@@ -7,8 +7,10 @@ from datetime import datetime
 from app.models.equipment import Equipment
 from app.models.component import Component
 from app.models.work import Work
+from app.models.user import User
 from app.db.database import get_db
-
+from app.dependencies import get_current_user
+from app.services.permission_service import can_view, can_edit
 
 router = APIRouter()
 
@@ -104,10 +106,12 @@ class BulkEquipmentImport(BaseModel):
 @router.post("", response_model=EquipmentResponse)
 async def create_equipment(
     payload: EquipmentCreate,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
     Create equipment with optional components in one call.
+    Requires edit permission on work.
     
     Example:
         {
@@ -124,6 +128,10 @@ async def create_equipment(
             ]
         }
     """
+    # ✅ NEW: Permission check
+    if not can_edit(db, payload.work_id, current_user.id):
+        raise HTTPException(status_code=403, detail="You don't have permission to edit this work")
+    
     # Verify work exists
     work = db.query(Work).filter(Work.id == payload.work_id).first()
     if not work:
@@ -163,11 +171,17 @@ async def create_equipment(
 @router.get("/work/{work_id}", response_model=List[EquipmentResponse])
 async def list_equipment_by_work(
     work_id: int,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
     List all equipment for a work.
+    Requires view permission on work.
     """
+    # ✅ NEW: Permission check
+    if not can_view(db, work_id, current_user.id):
+        raise HTTPException(status_code=403, detail="You don't have access to this work")
+    
     work = db.query(Work).filter(Work.id == work_id).first()
     if not work:
         raise HTTPException(status_code=404, detail="Work not found")
@@ -179,14 +193,20 @@ async def list_equipment_by_work(
 @router.get("/{equipment_id}", response_model=EquipmentResponse)
 async def get_equipment(
     equipment_id: int,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
     Get equipment by ID with all components.
+    Requires view permission on the equipment's work.
     """
     equipment = db.query(Equipment).filter(Equipment.id == equipment_id).first()
     if not equipment:
         raise HTTPException(status_code=404, detail="Equipment not found")
+    
+    # ✅ NEW: Permission check
+    if not can_view(db, equipment.work_id, current_user.id):
+        raise HTTPException(status_code=403, detail="You don't have access to this work")
     
     return EquipmentResponse.from_orm(equipment)
 
@@ -195,14 +215,20 @@ async def get_equipment(
 async def update_equipment(
     equipment_id: int,
     payload: EquipmentUpdate,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
     Update equipment.
+    Requires edit permission on the equipment's work.
     """
     equipment = db.query(Equipment).filter(Equipment.id == equipment_id).first()
     if not equipment:
         raise HTTPException(status_code=404, detail="Equipment not found")
+    
+    # ✅ NEW: Permission check
+    if not can_edit(db, equipment.work_id, current_user.id):
+        raise HTTPException(status_code=403, detail="You don't have permission to edit this work")
     
     try:
         update_data = payload.dict(exclude_unset=True)
@@ -224,14 +250,20 @@ async def update_equipment(
 @router.delete("/{equipment_id}")
 async def delete_equipment(
     equipment_id: int,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
     Delete equipment (cascade deletes all components).
+    Requires edit permission on the equipment's work.
     """
     equipment = db.query(Equipment).filter(Equipment.id == equipment_id).first()
     if not equipment:
         raise HTTPException(status_code=404, detail="Equipment not found")
+    
+    # ✅ NEW: Permission check
+    if not can_edit(db, equipment.work_id, current_user.id):
+        raise HTTPException(status_code=403, detail="You don't have permission to edit this work")
     
     db.delete(equipment)
     db.commit()
@@ -242,10 +274,12 @@ async def delete_equipment(
 @router.post("/bulk", response_model=List[EquipmentResponse])
 async def bulk_import_equipment(
     payload: BulkEquipmentImport,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
     Bulk import equipment with components.
+    Requires edit permission on work.
     
     Example:
         {
@@ -264,6 +298,10 @@ async def bulk_import_equipment(
             ]
         }
     """
+    # ✅ NEW: Permission check
+    if not can_edit(db, payload.work_id, current_user.id):
+        raise HTTPException(status_code=403, detail="You don't have permission to edit this work")
+    
     # Verify work exists
     work = db.query(Work).filter(Work.id == payload.work_id).first()
     if not work:
@@ -311,14 +349,20 @@ async def bulk_import_equipment(
 async def create_component(
     equipment_id: int,
     payload: ComponentCreate,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
     Create a component for equipment.
+    Requires edit permission on the equipment's work.
     """
     equipment = db.query(Equipment).filter(Equipment.id == equipment_id).first()
     if not equipment:
         raise HTTPException(status_code=404, detail="Equipment not found")
+    
+    # ✅ NEW: Permission check
+    if not can_edit(db, equipment.work_id, current_user.id):
+        raise HTTPException(status_code=403, detail="You don't have permission to edit this work")
     
     component = Component(
         equipment_id=equipment_id,
@@ -334,14 +378,20 @@ async def create_component(
 @router.get("/{equipment_id}/components", response_model=List[ComponentResponse])
 async def list_components(
     equipment_id: int,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
     List all components for equipment.
+    Requires view permission on the equipment's work.
     """
     equipment = db.query(Equipment).filter(Equipment.id == equipment_id).first()
     if not equipment:
         raise HTTPException(status_code=404, detail="Equipment not found")
+    
+    # ✅ NEW: Permission check
+    if not can_view(db, equipment.work_id, current_user.id):
+        raise HTTPException(status_code=403, detail="You don't have access to this work")
     
     components = db.query(Component).filter(Component.equipment_id == equipment_id).all()
     return [ComponentResponse.from_orm(c) for c in components]
@@ -350,14 +400,24 @@ async def list_components(
 @router.get("/components/{component_id}", response_model=ComponentResponse)
 async def get_component(
     component_id: int,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
     Get component by ID.
+    Requires view permission on the equipment's work.
     """
     component = db.query(Component).filter(Component.id == component_id).first()
     if not component:
         raise HTTPException(status_code=404, detail="Component not found")
+    
+    equipment = db.query(Equipment).filter(Equipment.id == component.equipment_id).first()
+    if not equipment:
+        raise HTTPException(status_code=404, detail="Equipment not found")
+    
+    # ✅ NEW: Permission check
+    if not can_view(db, equipment.work_id, current_user.id):
+        raise HTTPException(status_code=403, detail="You don't have access to this work")
     
     return ComponentResponse.from_orm(component)
 
@@ -366,14 +426,24 @@ async def get_component(
 async def update_component(
     component_id: int,
     payload: ComponentUpdate,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
     Update a component.
+    Requires edit permission on the equipment's work.
     """
     component = db.query(Component).filter(Component.id == component_id).first()
     if not component:
         raise HTTPException(status_code=404, detail="Component not found")
+    
+    equipment = db.query(Equipment).filter(Equipment.id == component.equipment_id).first()
+    if not equipment:
+        raise HTTPException(status_code=404, detail="Equipment not found")
+    
+    # ✅ NEW: Permission check
+    if not can_edit(db, equipment.work_id, current_user.id):
+        raise HTTPException(status_code=403, detail="You don't have permission to edit this work")
     
     update_data = payload.dict(exclude_unset=True)
     for key, value in update_data.items():
@@ -388,14 +458,24 @@ async def update_component(
 @router.delete("/components/{component_id}")
 async def delete_component(
     component_id: int,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
     Delete a component.
+    Requires edit permission on the equipment's work.
     """
     component = db.query(Component).filter(Component.id == component_id).first()
     if not component:
         raise HTTPException(status_code=404, detail="Component not found")
+    
+    equipment = db.query(Equipment).filter(Equipment.id == component.equipment_id).first()
+    if not equipment:
+        raise HTTPException(status_code=404, detail="Equipment not found")
+    
+    # ✅ NEW: Permission check
+    if not can_edit(db, equipment.work_id, current_user.id):
+        raise HTTPException(status_code=403, detail="You don't have permission to edit this work")
     
     db.delete(component)
     db.commit()
@@ -407,10 +487,12 @@ async def delete_component(
 async def bulk_update_components(
     payload: List[ComponentUpdate],
     component_ids: List[int],
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
     Update multiple components at once.
+    Requires edit permission on the equipment's work.
     
     Note: component_ids and payload must be same length.
     """
@@ -426,6 +508,15 @@ async def bulk_update_components(
         component = db.query(Component).filter(Component.id == component_id).first()
         if not component:
             raise HTTPException(status_code=404, detail=f"Component {component_id} not found")
+        
+        equipment = db.query(Equipment).filter(Equipment.id == component.equipment_id).first()
+        if not equipment:
+            raise HTTPException(status_code=404, detail="Equipment not found")
+        
+        # ✅ NEW: Permission check (only on first iteration to avoid redundant checks)
+        if component_id == component_ids[0]:
+            if not can_edit(db, equipment.work_id, current_user.id):
+                raise HTTPException(status_code=403, detail="You don't have permission to edit this work")
         
         data = update_data.dict(exclude_unset=True)
         for key, value in data.items():
