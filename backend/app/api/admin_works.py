@@ -17,10 +17,12 @@ from sqlalchemy import desc, func
 from app.db.database import get_db
 from app.models.user import User, UserRole
 from app.models.work import Work
+from app.models.work_collaborator import WorkCollaborator, CollaboratorRole
 from app.dependencies import get_current_user
 from app.schemas.work import (
     WorkResponse,
     WorkDetailResponse,
+    CollaboratorInfo,
 )
 from app.services.work_service import (
     get_work_by_id,
@@ -74,10 +76,11 @@ class AdminWorksListResponse(BaseModel):
 class AdminWorkDetailResponse(BaseModel):
     """Response for work details with user info"""
     work: WorkResponse
-    user: dict
+    owner: Optional[dict]
     equipment_count: int
     file_count: int
     extraction_count: int
+    collaborator_count: int
     
     class Config:
         from_attributes = True
@@ -92,7 +95,7 @@ class AssignWorkRequest(BaseModel):
 class AssignWorkResponse(BaseModel):
     """Response after assigning work"""
     work_id: int
-    user_id: int
+    owner_id: int
     message: str
     
     class Config:
@@ -104,7 +107,29 @@ class AdminWorkUpdateRequest(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     status: Optional[str] = None
-    user_id: Optional[int] = None  # Admin can change owner
+    owner_id: Optional[int] = None  # Admin can change owner
+
+
+# ============================================================================
+# HELPER FUNCTIONS
+# ============================================================================
+
+def get_work_owner(db: Session, work_id: int) -> Optional[dict]:
+    """Get the owner of a work"""
+    owner_collab = db.query(WorkCollaborator).filter(
+        WorkCollaborator.work_id == work_id,
+        WorkCollaborator.role == CollaboratorRole.OWNER
+    ).first()
+    
+    if not owner_collab:
+        return None
+    
+    return {
+        "user_id": owner_collab.user_id,
+        "username": owner_collab.user.username,
+        "email": owner_collab.user.email,
+        "full_name": owner_collab.user.full_name,
+    }
 
 
 # ============================================================================
@@ -122,7 +147,7 @@ async def list_all_works(
     skip: int = Query(0, ge=0, description="Number of records to skip"),
     limit: int = Query(50, ge=1, le=500, description="Max records to return"),
     status: Optional[str] = Query(None, description="Filter by status (active, completed, archived)"),
-    user_id: Optional[int] = Query(None, description="Filter by user ID"),
+    user_id: Optional[int] = Query(None, description="Filter by owner user ID"),
     sort_by: str = Query("created_at", description="Sort by: created_at, name, status"),
     sort_order: str = Query("desc", description="Sort order: asc, desc"),
     current_user: User = Depends(verify_admin),
@@ -135,7 +160,7 @@ async def list_all_works(
     - skip: Pagination offset (default 0)
     - limit: Records per page (1-500, default 50)
     - status: Filter by status (optional)
-    - user_id: Filter by user ID (optional)
+    - user_id: Filter by owner user ID (optional)
     - sort_by: Sort column (created_at, name, status)
     - sort_order: asc or desc (default desc)
     
@@ -154,7 +179,11 @@ async def list_all_works(
         query = query.filter(Work.status == status)
     
     if user_id is not None:
-        query = query.filter(Work.user_id == user_id)
+        # Filter by owner (via WorkCollaborator)
+        query = query.join(WorkCollaborator).filter(
+            WorkCollaborator.user_id == user_id,
+            WorkCollaborator.role == CollaboratorRole.OWNER
+        )
     
     # Apply sorting
     sort_column = {
@@ -168,33 +197,33 @@ async def list_all_works(
     else:
         query = query.order_by(desc(sort_column))
     
-    # Get total count
+    # Get total count (before pagination)
     total = query.count()
     
     # Paginate
     works = query.offset(skip).limit(limit).all()
     
-    # Format response
-    works_data = [
-        {
+    # Format response - get owner for each work
+    works_data = []
+    for w in works:
+        owner = get_work_owner(db, w.id)
+        works_data.append({
             "id": w.id,
             "name": w.name,
             "description": w.description,
             "status": w.status,
-            "user_id": w.user_id,
-            "user_username": w.user.username if w.user else None,
+            "owner_id": owner["user_id"] if owner else None,
+            "owner_username": owner["username"] if owner else None,
             "created_at": w.created_at,
             "updated_at": w.updated_at,
-        }
-        for w in works
-    ]
+        })
     
     logger.info(f"Listed {len(works)} works (total: {total})")
     
     return AdminWorksListResponse(
         works=works_data,
         total=total,
-        page=skip // limit,
+        page=skip // limit if limit > 0 else 0,
         page_size=limit,
     )
 
@@ -249,7 +278,11 @@ async def list_user_works(
             detail="User not found",
         )
     
-    query = db.query(Work).filter(Work.user_id == user_id)
+    # Filter by owner (user has OWNER role on work)
+    query = db.query(Work).join(WorkCollaborator).filter(
+        WorkCollaborator.user_id == user_id,
+        WorkCollaborator.role == CollaboratorRole.OWNER
+    )
     
     if status:
         query = query.filter(Work.status == status)
@@ -263,8 +296,8 @@ async def list_user_works(
             "name": w.name,
             "description": w.description,
             "status": w.status,
-            "user_id": w.user_id,
-            "user_username": w.user.username,
+            "owner_id": user_id,
+            "owner_username": target_user.username,
             "created_at": w.created_at,
             "updated_at": w.updated_at,
         }
@@ -276,7 +309,7 @@ async def list_user_works(
     return AdminWorksListResponse(
         works=works_data,
         total=total,
-        page=skip // limit,
+        page=skip // limit if limit > 0 else 0,
         page_size=limit,
     )
 
@@ -306,6 +339,7 @@ async def get_work_admin(
     - Equipment count
     - File count
     - Extraction count
+    - Collaborator count
     
     Args:
         work_id: Work ID
@@ -332,6 +366,9 @@ async def get_work_admin(
             detail="Work not found",
         )
     
+    # Get owner
+    owner = get_work_owner(db, work_id)
+    
     # Get counts
     from app.models.equipment import Equipment
     from app.models.file import File
@@ -340,26 +377,25 @@ async def get_work_admin(
     equipment_count = db.query(Equipment).filter(Equipment.work_id == work_id).count()
     file_count = db.query(File).filter(File.work_id == work_id).count()
     extraction_count = db.query(Extraction).filter(Extraction.work_id == work_id).count()
+    collaborator_count = db.query(WorkCollaborator).filter(WorkCollaborator.work_id == work_id).count()
     
-    logger.info(f"Work {work_id}: {equipment_count} equipment, {file_count} files, {extraction_count} extractions")
+    logger.info(
+        f"Work {work_id}: {equipment_count} equipment, {file_count} files, "
+        f"{extraction_count} extractions, {collaborator_count} collaborators"
+    )
     
     return AdminWorkDetailResponse(
         work=WorkResponse.model_validate(work),
-        user={
-            "id": work.user.id,
-            "username": work.user.username,
-            "email": work.user.email,
-            "full_name": work.user.full_name,
-            "role": work.user.role,
-        },
+        owner=owner,
         equipment_count=equipment_count,
         file_count=file_count,
         extraction_count=extraction_count,
+        collaborator_count=collaborator_count,
     )
 
 
 # ============================================================================
-# ASSIGN WORK TO USER (Admin Only)
+# ASSIGN WORK TO USER (Admin Only) - CHANGE OWNER
 # ============================================================================
 
 @router.post(
@@ -376,6 +412,8 @@ async def assign_work_to_user(
 ) -> AssignWorkResponse:
     """
     Assign a work to a user (change owner).
+    
+    Removes current owner role and makes new user the owner.
     
     Args:
         request: AssignWorkRequest with work_id and user_id
@@ -417,17 +455,45 @@ async def assign_work_to_user(
         )
     
     try:
-        old_owner = work.user.username
-        work.user_id = request.user_id
-        db.commit()
-        db.refresh(work)
+        # Get current owner
+        current_owner = db.query(WorkCollaborator).filter(
+            WorkCollaborator.work_id == request.work_id,
+            WorkCollaborator.role == CollaboratorRole.OWNER
+        ).first()
         
-        logger.info(f"âœ… Work {request.work_id} transferred from {old_owner} to {target_user.username}")
+        old_owner_name = current_owner.user.username if current_owner else "unknown"
+        
+        # Remove owner role from current owner (if exists)
+        if current_owner:
+            db.delete(current_owner)
+            db.flush()
+        
+        # Check if new owner is already a collaborator
+        existing_collab = db.query(WorkCollaborator).filter(
+            WorkCollaborator.work_id == request.work_id,
+            WorkCollaborator.user_id == request.user_id
+        ).first()
+        
+        if existing_collab:
+            # Update existing collaborator to owner
+            existing_collab.role = CollaboratorRole.OWNER
+        else:
+            # Create new owner collaborator
+            new_owner = WorkCollaborator(
+                work_id=request.work_id,
+                user_id=request.user_id,
+                role=CollaboratorRole.OWNER
+            )
+            db.add(new_owner)
+        
+        db.commit()
+        
+        logger.info(f"[OK] Work {request.work_id} transferred from {old_owner_name} to {target_user.username}")
         
         return AssignWorkResponse(
             work_id=work.id,
-            user_id=work.user_id,
-            message=f"Work reassigned from {old_owner} to {target_user.username}",
+            owner_id=request.user_id,
+            message=f"Work reassigned from {old_owner_name} to {target_user.username}",
         )
     
     except Exception as e:
@@ -476,7 +542,7 @@ async def update_work_admin(
         PUT /api/admin/works/1
         {
             "status": "completed",
-            "user_id": 5
+            "owner_id": 5
         }
     """
     logger.info(f"Admin {current_user.username} updating work {work_id}")
@@ -503,22 +569,49 @@ async def update_work_admin(
             logger.debug(f"Updated work status to: {request.status}")
         
         # Update owner (admin-only feature)
-        if request.user_id is not None:
-            new_owner = db.query(User).filter(User.id == request.user_id).first()
+        if request.owner_id is not None:
+            new_owner = db.query(User).filter(User.id == request.owner_id).first()
             if not new_owner:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail="New owner user not found",
                 )
             
-            old_owner = work.user.username
-            work.user_id = request.user_id
-            logger.info(f"Changed work owner from {old_owner} to {new_owner.username}")
+            # Get current owner
+            current_owner = db.query(WorkCollaborator).filter(
+                WorkCollaborator.work_id == work_id,
+                WorkCollaborator.role == CollaboratorRole.OWNER
+            ).first()
+            
+            old_owner_name = current_owner.user.username if current_owner else "unknown"
+            
+            # Remove old owner role
+            if current_owner:
+                db.delete(current_owner)
+                db.flush()
+            
+            # Check if new owner is already collaborator
+            existing_collab = db.query(WorkCollaborator).filter(
+                WorkCollaborator.work_id == work_id,
+                WorkCollaborator.user_id == request.owner_id
+            ).first()
+            
+            if existing_collab:
+                existing_collab.role = CollaboratorRole.OWNER
+            else:
+                new_owner_collab = WorkCollaborator(
+                    work_id=work_id,
+                    user_id=request.owner_id,
+                    role=CollaboratorRole.OWNER
+                )
+                db.add(new_owner_collab)
+            
+            logger.info(f"Changed work owner from {old_owner_name} to {new_owner.username}")
         
         db.commit()
         db.refresh(work)
         
-        logger.info(f"âœ… Work {work_id} updated successfully")
+        logger.info(f"[OK] Work {work_id} updated successfully")
         
         return WorkResponse.model_validate(work)
     
@@ -555,6 +648,7 @@ async def delete_work_admin(
     - Equipment and components
     - Extractions
     - Files
+    - Collaborators
     
     Args:
         work_id: Work ID
@@ -585,7 +679,7 @@ async def delete_work_admin(
         db.delete(work)
         db.commit()
         
-        logger.info(f"âœ… Work deleted: {work_name} (ID: {work_id})")
+        logger.info(f"[OK] Work deleted: {work_name} (ID: {work_id})")
     
     except Exception as e:
         db.rollback()
@@ -617,7 +711,7 @@ Admin Works Routes (All require ADMIN role):
 
 3. GET /api/admin/works/{work_id}
    - Get detailed work information
-   - Includes: equipment count, file count, extraction count
+   - Includes: equipment count, file count, extraction count, collaborator count
    - Response: AdminWorkDetailResponse
    - Status: 200 OK or 404 Not Found
 
@@ -629,7 +723,7 @@ Admin Works Routes (All require ADMIN role):
 
 5. PUT /api/admin/works/{work_id}
    - Update work (including owner)
-   - Body: name, description, status, user_id (all optional)
+   - Body: name, description, status, owner_id (all optional)
    - Response: WorkResponse
    - Status: 200 OK or 404/400
 

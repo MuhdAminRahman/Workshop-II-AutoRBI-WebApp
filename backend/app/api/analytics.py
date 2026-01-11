@@ -58,12 +58,14 @@ async def extraction_status(
     cutoff_date = _get_cutoff_date(period)
     
     if group_by == "user_id":
-        # ✅ UPDATED: Use WorkCollaborator instead of direct Work.user_id
+        # ✓ FIXED: Correct join syntax
         result = db.query(
             WorkCollaborator.user_id,
             Extraction.status,
             func.count(Extraction.id).label("count")
-        ).join(Work, WorkCollaborator.work_id == Work.id).join(
+        ).join(
+            Work, WorkCollaborator.work_id == Work.id
+        ).join(
             Extraction, Work.id == Extraction.work_id
         ).filter(
             Extraction.created_at >= cutoff_date
@@ -123,18 +125,21 @@ async def work_status(
     
     group_by options:
     - None: overall stats
-    - "user_id": breakdown by user
+    - "user_id": breakdown by user (owner)
     """
     cutoff_date = _get_cutoff_date(period)
     
     if group_by == "user_id":
-        # ✅ UPDATED: Use WorkCollaborator instead of direct Work.user_id
+        # ✓ FIXED: Correct join - get owner via WorkCollaborator
         result = db.query(
             WorkCollaborator.user_id,
             Work.status,
             func.count(Work.id).label("count")
-        ).join(WorkCollaborator, Work.id == WorkCollaborator.work_id).filter(
-            Work.created_at >= cutoff_date
+        ).join(
+            Work, WorkCollaborator.work_id == Work.id
+        ).filter(
+            Work.created_at >= cutoff_date,
+            WorkCollaborator.role == "owner"  # Only count owners
         ).group_by(WorkCollaborator.user_id, Work.status).all()
         
         data = [
@@ -257,18 +262,21 @@ async def user_activity(
     """
     cutoff_date = _get_cutoff_date(period)
     
-    # ✅ UPDATED: Use WorkCollaborator to get user_id from work owners/editors
+    # ✓ FIXED: Correct joins to get user_id from work owners
     result = db.query(
         WorkCollaborator.user_id,
         func.count(func.distinct(Work.id)).label("works_created"),
         func.count(func.distinct(File.id)).label("files_created"),
         func.count(func.distinct(Extraction.id)).label("extractions_run")
-    ).join(Work, WorkCollaborator.work_id == Work.id).outerjoin(
+    ).join(
+        Work, WorkCollaborator.work_id == Work.id
+    ).outerjoin(
         File, Work.id == File.work_id
     ).outerjoin(
         Extraction, Work.id == Extraction.work_id
     ).filter(
-        Work.created_at >= cutoff_date
+        Work.created_at >= cutoff_date,
+        WorkCollaborator.role == "owner"  # Only count work owners
     ).group_by(WorkCollaborator.user_id).all()
     
     data = [

@@ -26,6 +26,7 @@ engine = create_engine(
     poolclass=QueuePool,
     pool_size=settings.DATABASE_POOL_SIZE,
     max_overflow=settings.DATABASE_MAX_OVERFLOW,
+    pool_timeout=30,  # ✓ FIXED: Add timeout for acquiring connections
     pool_pre_ping=True,  # Test connections before using them
     echo=settings.ENVIRONMENT == "development",  # Log SQL queries in dev
     connect_args={
@@ -110,18 +111,20 @@ def init_db():
         # These imports register the models with the ORM metadata
         from app.models.user import User  # noqa: F401
         from app.models.work import Work  # noqa: F401
+        from app.models.work_collaborator import WorkCollaborator  # noqa: F401
         from app.models.equipment import Equipment  # noqa: F401
         from app.models.component import Component  # noqa: F401
         from app.models.extraction import Extraction  # noqa: F401
         from app.models.file import File  # noqa: F401
+        from app.models.activity import Activity  # noqa: F401
         
         # Create all tables (idempotent - won't error if they exist)
         Base.metadata.create_all(bind=engine)
         
-        logger.info("✅ Database tables created successfully")
+        logger.info("[OK] Database tables created successfully")
         
     except Exception as e:
-        logger.error(f"❌ Failed to initialize database: {str(e)}")
+        logger.error(f"[ERROR] Failed to initialize database: {str(e)}")
         raise
 
 
@@ -133,19 +136,19 @@ def init_db():
 @event.listens_for(QueuePool, "connect")
 def receive_connect(dbapi_conn, connection_record):
     """Called when a new connection is created"""
-    logger.debug("📊 New database connection created")
+    logger.debug("[POOL] New database connection created")
 
 
 @event.listens_for(QueuePool, "checkin")
 def receive_checkin(dbapi_conn, connection_record):
     """Called when a connection is returned to the pool"""
-    logger.debug("📊 Connection returned to pool")
+    logger.debug("[POOL] Connection returned to pool")
 
 
 @event.listens_for(QueuePool, "checkout")
 def receive_checkout(dbapi_conn, connection_record, connection_proxy):
     """Called when a connection is taken from the pool"""
-    logger.debug("📊 Connection checked out from pool")
+    logger.debug("[POOL] Connection checked out from pool")
 
 
 # ============================================================================
@@ -181,4 +184,4 @@ def close_db():
     Called on application shutdown.
     """
     engine.dispose()
-    logger.info("🔌 Database connections closed")
+    logger.info("[OK] Database connections closed")

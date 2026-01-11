@@ -1,5 +1,6 @@
 """
 Permission Service - Centralized access control for work collaboration
+WITH ADMIN OVERRIDE
 """
 
 import logging
@@ -7,6 +8,7 @@ from enum import Enum
 from sqlalchemy.orm import Session
 
 from app.models.work_collaborator import WorkCollaborator, CollaboratorRole
+from app.models.user import User, UserRole
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +25,8 @@ def get_user_permission(db: Session, work_id: int, user_id: int) -> PermissionLe
     """
     Get user's permission level for a work.
     
+    ✓ FIXED: Admins get OWNER level automatically
+    
     Args:
         db: Database session
         work_id: Work ID
@@ -36,6 +40,12 @@ def get_user_permission(db: Session, work_id: int, user_id: int) -> PermissionLe
         if perm == PermissionLevel.OWNER:
             print("User is owner")
     """
+    # ✓ FIXED: Check if user is admin first (admin override)
+    user = db.query(User).filter(User.id == user_id).first()
+    if user and user.role == UserRole.ADMIN:
+        logger.debug(f"Admin user {user_id} has OWNER permission on all works")
+        return PermissionLevel.OWNER
+    
     collaborator = db.query(WorkCollaborator).filter(
         WorkCollaborator.work_id == work_id,
         WorkCollaborator.user_id == user_id
@@ -83,6 +93,8 @@ def can_view(db: Session, work_id: int, user_id: int) -> bool:
     """
     Check if user can view a work.
     Required for: GET endpoints
+    
+    ✓ Admins can always view
     """
     return require_permission(db, work_id, user_id, PermissionLevel.VIEWER)
 
@@ -91,6 +103,8 @@ def can_edit(db: Session, work_id: int, user_id: int) -> bool:
     """
     Check if user can edit a work (create/update equipment, files, extractions).
     Required for: POST/PUT endpoints for content
+    
+    ✓ Admins can always edit
     """
     return require_permission(db, work_id, user_id, PermissionLevel.EDITOR)
 
@@ -99,6 +113,8 @@ def can_own(db: Session, work_id: int, user_id: int) -> bool:
     """
     Check if user is owner (can delete, manage collaborators).
     Required for: DELETE endpoints, collaboration management
+    
+    ✓ Admins are considered owners of all works
     """
     return require_permission(db, work_id, user_id, PermissionLevel.OWNER)
 
@@ -144,3 +160,34 @@ def get_owner_count(db: Session, work_id: int) -> int:
         WorkCollaborator.work_id == work_id,
         WorkCollaborator.role == CollaboratorRole.OWNER
     ).count()
+
+
+def get_work_collaborators(db: Session, work_id: int) -> list:
+    """
+    Get all collaborators for a work.
+    
+    Args:
+        db: Database session
+        work_id: Work ID
+    
+    Returns:
+        List of WorkCollaborator objects
+    """
+    return db.query(WorkCollaborator).filter(
+        WorkCollaborator.work_id == work_id
+    ).all()
+
+
+def is_admin(db: Session, user_id: int) -> bool:
+    """
+    Check if user is an admin.
+    
+    Args:
+        db: Database session
+        user_id: User ID
+    
+    Returns:
+        True if user is admin, False otherwise
+    """
+    user = db.query(User).filter(User.id == user_id).first()
+    return user and user.role == UserRole.ADMIN
