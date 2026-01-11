@@ -48,6 +48,8 @@ def create_work():
     """Create new work"""
     token = get_auth_token()
     api = BackendAPI(token)
+    current_user = session.get('user', {})
+    user_id = current_user.get('id')
     
     name = request.form.get('name')
     description = request.form.get('description', '')
@@ -62,6 +64,20 @@ def create_work():
         flash(parse_error_message(response), 'danger')
     else:
         flash('Work created successfully!', 'success')
+        
+        # Log activity
+        try:
+            work_id = response.get('id')
+            if work_id and user_id:
+                api.log_activity(
+                    user_id=user_id,
+                    entity_type='work',
+                    entity_id=work_id,
+                    action='created',
+                    data={'name': name, 'description': description}
+                )
+        except Exception as e:
+            print(f"Failed to log activity: {e}")
     
     return redirect(url_for('works.list_works'))
 
@@ -104,6 +120,8 @@ def start_extraction(work_id):
     """Start extraction by uploading PDF"""
     token = get_auth_token()
     api = BackendAPI(token)
+    current_user = session.get('user', {})
+    user_id = current_user.get('id')
     
     # Check if file was uploaded
     if 'file' not in request.files:
@@ -123,6 +141,23 @@ def start_extraction(work_id):
     
     if 'error' in response:
         return jsonify({'error': parse_error_message(response)}), 400
+    
+    # Log activity for file upload
+    try:
+        if user_id:
+            api.log_activity(
+                user_id=user_id,
+                entity_type='file',
+                entity_id=response.get('file_id', 0),
+                action='created',
+                data={
+                    'filename': file.filename,
+                    'work_id': work_id,
+                    'extraction_id': response.get('extraction_id')
+                }
+            )
+    except Exception as e:
+        print(f"Failed to log file upload activity: {e}")
     
     # Return extraction ID as JSON
     return jsonify({
@@ -238,6 +273,40 @@ def get_extraction_status_api(extraction_id):
     response = api.get_extraction_status(extraction_id)
     return jsonify(response)
 
+@works_bp.route('/extraction/log-completion', methods=['POST'])
+@login_required
+def log_extraction_completion():
+    """Log extraction completion activity"""
+    try:
+        data = request.get_json()
+        work_id = data.get('work_id')
+        extraction_id = data.get('extraction_id')
+        equipment_count = data.get('equipment_count', 0)
+        
+        token = get_auth_token()
+        api = BackendAPI(token)
+        current_user = session.get('user', {})
+        user_id = current_user.get('id')
+        
+        if user_id:
+            api.log_activity(
+                user_id=user_id,
+                entity_type='extraction',
+                entity_id=extraction_id,
+                action='created',
+                data={
+                    'work_id': work_id,
+                    'extraction_id': extraction_id,
+                    'equipment_count': equipment_count,
+                    'status': 'completed'
+                }
+            )
+        
+        return jsonify({'success': True}), 200
+    except Exception as e:
+        print(f"Failed to log extraction completion: {e}")
+        return jsonify({'error': str(e)}), 500
+
 @works_bp.route('/<int:work_id>/equipment/<int:equipment_id>')
 @login_required
 def view_equipment(work_id, equipment_id):
@@ -287,6 +356,8 @@ def edit_work(work_id):
     """Edit work"""
     token = get_auth_token()
     api = BackendAPI(token)
+    current_user = session.get('user', {})
+    user_id = current_user.get('id')
     
     name = request.form.get('name')
     description = request.form.get('description', '')
@@ -302,6 +373,19 @@ def edit_work(work_id):
         flash(parse_error_message(response), 'danger')
     else:
         flash('Work updated successfully!', 'success')
+        
+        # Log activity
+        try:
+            if user_id:
+                api.log_activity(
+                    user_id=user_id,
+                    entity_type='work',
+                    entity_id=work_id,
+                    action='updated',
+                    data={'name': name, 'description': description, 'status': status}
+                )
+        except Exception as e:
+            print(f"Failed to log activity: {e}")
     
     return redirect(url_for('works.view_work', work_id=work_id))
 
@@ -311,6 +395,12 @@ def delete_work(work_id):
     """Delete work"""
     token = get_auth_token()
     api = BackendAPI(token)
+    current_user = session.get('user', {})
+    user_id = current_user.get('id')
+    
+    # Get work name before deleting
+    work_response = api.get_work(work_id)
+    work_name = work_response.get('work', {}).get('name', 'Unknown') if not 'error' in work_response else 'Unknown'
     
     response = api.delete_work(work_id)
     
@@ -318,6 +408,19 @@ def delete_work(work_id):
         flash(parse_error_message(response), 'danger')
     else:
         flash('Work deleted successfully!', 'success')
+        
+        # Log activity
+        try:
+            if user_id:
+                api.log_activity(
+                    user_id=user_id,
+                    entity_type='work',
+                    entity_id=work_id,
+                    action='deleted',
+                    data={'name': work_name}
+                )
+        except Exception as e:
+            print(f"Failed to log activity: {e}")
     
     return redirect(url_for('works.list_works'))
 
@@ -393,54 +496,132 @@ def work_history():
     # Get filter parameters
     days = request.args.get('days', 7, type=int)
     work_id = request.args.get('work_id', None, type=int)
+    page = request.args.get('page', 1, type=int)
+    per_page = 15  # Activities per page
     
     # Get activity history from API
+    activities = []
+    total = 0
+    
     try:
         if work_id:
-            # Get activities for specific work
+            # Try to get activities for specific work
+            # Note: This endpoint may fail on some databases due to JSON queries
+            # If it fails, we'll fallback to filtering all activities
             response = api.get_work_activities(work_id=work_id)
+            print(f"Work activities response: {response}")
+            
+            # Check if the work-specific endpoint failed
+            if 'error' in response and 'Internal server error' in str(response.get('error', '')):
+                print(f"Work-specific endpoint failed, using fallback approach")
+                
+                # Fallback: Get all activities and filter by work_id in frontend
+                all_response = api.get_work_history(days=365)  # Get more days for better results
+                
+                if isinstance(all_response, list):
+                    # Filter activities related to this work
+                    activities = [
+                        a for a in all_response 
+                        if (a.get('entity_type') == 'work' and a.get('entity_id') == work_id) or
+                           (a.get('data', {}).get('work_id') == work_id)
+                    ]
+                    total = len(activities)
+                    print(f"Filtered {total} activities for work {work_id}")
+                else:
+                    flash('Could not retrieve work activities', 'danger')
+            elif 'error' in response:
+                error_msg = parse_error_message(response)
+                flash(f'API Error: {error_msg}', 'danger')
+                print(f"API error: {error_msg}")
+            elif isinstance(response, dict):
+                # Backend returns WorkHistoryResponse for /work/{work_id} endpoint
+                activities = response.get('activities', [])
+                total = response.get('total_activities', len(activities))
+                print(f"Got {total} activities from dict")
         else:
             # Get all activities for period
             response = api.get_work_history(days=days)
+            print(f"Period history response: {response}")
+            
+            if 'error' in response:
+                error_msg = parse_error_message(response)
+                flash(f'API Error: {error_msg}', 'danger')
+                print(f"API error: {error_msg}")
+            elif isinstance(response, list):
+                # Backend returns list of ActivityResponse directly for /period endpoint
+                activities = response
+                total = len(activities)
+                print(f"Got {total} activities as list")
+            else:
+                print(f"Unexpected response type: {type(response)}")
         
-        if 'error' in response:
-            flash(parse_error_message(response), 'danger')
-            activities = []
-            total = 0
-        elif isinstance(response, list):
-            # Backend returns list directly
-            activities = response
-            total = len(activities)
-        else:
-            activities = response.get('activities', response.get('items', []))
-            total = response.get('total', len(activities))
-        
-        # Filter activities by user for engineers
+        # Filter activities by user for engineers (if not admin)
         if not is_admin and activities:
             # Engineers should only see their own activities
+            original_total = len(activities)
             activities = [a for a in activities if a.get('user_id') == user_id]
             total = len(activities)
             
     except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f'Exception fetching work history: {error_trace}')
         flash(f'Error fetching work history: {str(e)}', 'danger')
         activities = []
         total = 0
     
     # Get list of works for filtering dropdown
-    works_response = api.get_works()
-    all_works = works_response.get('works', []) if isinstance(works_response, dict) else []
+    try:
+        works_response = api.get_works()
+        all_works = works_response.get('works', []) if isinstance(works_response, dict) else []
+        
+        # Filter works by user for engineers
+        if not is_admin:
+            works = [w for w in all_works if w.get('user_id') == user_id]
+        else:
+            works = all_works
+    except Exception as e:
+        flash(f'Error fetching works list: {str(e)}', 'warning')
+        works = []
     
-    # Filter works by user for engineers
-    if not is_admin:
-        works = [w for w in all_works if w.get('user_id') == user_id]
-    else:
-        works = all_works
+    # Get users list for username mapping (only for admins or current user)
+    users_map = {}
+    try:
+        if is_admin:
+            users_response = api.get_users()
+            users_list = users_response.get('users', []) if isinstance(users_response, dict) else []
+            users_map = {u.get('id'): u.get('username', f"User #{u.get('id')}") for u in users_list}
+        # Always add current user
+        users_map[user_id] = current_user.get('username', f"User #{user_id}")
+    except Exception as e:
+        print(f'Error fetching users: {e}')
+        users_map = {user_id: current_user.get('username', f"User #{user_id}")}
+    
+    # Implement pagination
+    total_activities = len(activities)
+    total_pages = (total_activities + per_page - 1) // per_page  # Ceiling division
+    
+    # Ensure page is within bounds
+    if page < 1:
+        page = 1
+    elif page > total_pages and total_pages > 0:
+        page = total_pages
+    
+    # Slice activities for current page
+    start_idx = (page - 1) * per_page
+    end_idx = start_idx + per_page
+    paginated_activities = activities[start_idx:end_idx]
     
     return render_template(
         'works/history.html',
-        activities=activities,
+        activities=paginated_activities,
         days=days,
         total=total,
         selected_work_id=work_id,
-        works=works
+        works=works,
+        users_map=users_map,
+        page=page,
+        per_page=per_page,
+        total_pages=total_pages,
+        total_activities=total_activities
     )

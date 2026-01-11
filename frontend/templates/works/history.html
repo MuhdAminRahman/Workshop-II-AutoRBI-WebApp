@@ -88,9 +88,14 @@
         margin-bottom: 10px;
     }
     
+    .activity-header h6 {
+        font-weight: 700 !important;
+    }
+    
     .activity-meta {
         font-size: 0.875rem;
         color: #6c757d;
+        font-weight: 400;
     }
     
     [data-theme="dark"] .activity-content {
@@ -111,6 +116,36 @@
     
     [data-theme="dark"] .filter-section {
         background: #2d3748;
+    }
+    
+    /* Pagination Dark Theme */
+    [data-theme="dark"] .pagination .page-link {
+        background-color: #2d3748;
+        border-color: #4a5568;
+        color: #cbd5e0;
+    }
+    
+    [data-theme="dark"] .pagination .page-link:hover {
+        background-color: #4a5568;
+        border-color: #718096;
+        color: #ffffff;
+    }
+    
+    [data-theme="dark"] .pagination .page-item.active .page-link {
+        background-color: #3182ce;
+        border-color: #3182ce;
+        color: #ffffff;
+    }
+    
+    [data-theme="dark"] .pagination .page-item.disabled .page-link {
+        background-color: #1a202c;
+        border-color: #2d3748;
+        color: #4a5568;
+    }
+    
+    [data-theme="dark"] .card-footer {
+        background-color: #2d3748 !important;
+        border-color: #4a5568 !important;
     }
 </style>
 {% endblock %}
@@ -134,10 +169,10 @@
 
     <!-- Filter Section -->
     <div class="filter-section">
-        <form method="GET" class="row g-3">
+        <form method="GET" class="row g-3" id="filterForm">
             <div class="col-md-4">
-                <label class="form-label">Show activities from last</label>
-                <select name="days" class="form-select form-select-sm">
+                <label class="form-label fw-bold">Show activities from last</label>
+                <select name="days" class="form-select" onchange="document.getElementById('filterForm').submit()">
                     <option value="1" {% if days == 1 %}selected{% endif %}>24 Hours</option>
                     <option value="7" {% if days == 7 %}selected{% endif %}>7 Days</option>
                     <option value="14" {% if days == 14 %}selected{% endif %}>14 Days</option>
@@ -146,8 +181,8 @@
                 </select>
             </div>
             <div class="col-md-4">
-                <label class="form-label">Filter by Work</label>
-                <select name="work_id" class="form-select form-select-sm">
+                <label class="form-label fw-bold">Filter by Work</label>
+                <select name="work_id" class="form-select" onchange="document.getElementById('filterForm').submit()">
                     <option value="">All Works</option>
                     {% for work in works %}
                     <option value="{{ work.id if work is mapping else work['id'] }}" 
@@ -158,9 +193,14 @@
                 </select>
             </div>
             <div class="col-md-4 d-flex align-items-end">
-                <button type="submit" class="btn btn-primary btn-sm w-100">
+                <button type="submit" class="btn btn-primary w-100">
                     <i class="bi bi-filter"></i> Apply Filter
                 </button>
+                {% if selected_work_id %}
+                <a href="{{ url_for('works.work_history') }}?days={{ days }}" class="btn btn-outline-secondary ms-2">
+                    <i class="bi bi-x-circle"></i>
+                </a>
+                {% endif %}
             </div>
         </form>
     </div>
@@ -201,13 +241,39 @@
                     <div class="activity-content">
                         <div class="activity-header">
                             <div>
-                                <h6 class="mb-1 fw-bold">
-                                    {{ activity.action|capitalize }}
+                                <h6 class="mb-1 fw-bold text-capitalize">
+                                    {% if activity.entity_type == 'file' and activity.action == 'created' %}
+                                        {% if activity.data and activity.data.report_type %}
+                                            Generated
+                                        {% else %}
+                                            Uploaded
+                                        {% endif %}
+                                    {% elif activity.entity_type == 'extraction' and activity.action == 'created' %}
+                                        Extracted
+                                    {% else %}
+                                        {{ activity.action|replace('_', ' ')|capitalize }}
+                                    {% endif %}
+                                    <span class="badge bg-secondary ms-2">{{ activity.entity_type|capitalize }}</span>
                                 </h6>
                                 <div class="activity-meta">
-                                    <i class="bi bi-person-circle"></i> User ID: {{ activity.user_id }}
-                                    • <i class="bi bi-tag"></i> {{ activity.entity_type|capitalize }}
-                                    • ID: {{ activity.entity_id }}
+                                    <i class="bi bi-person-circle"></i> 
+                                    {% if users_map and activity.user_id in users_map %}
+                                        {{ users_map[activity.user_id] }}
+                                    {% else %}
+                                        User #{{ activity.user_id }}
+                                    {% endif %}
+                                    {% if activity.entity_type != 'file' or activity.entity_id != 0 %}
+                                    • <i class="bi bi-hash"></i> ID: {{ activity.entity_id }}
+                                    {% endif %}
+                                    {% if activity.data %}
+                                        {% if activity.data.report_type %}
+                                        • <strong>{{ activity.data.report_type }}</strong>
+                                        {% elif activity.data.name %}
+                                        • <strong>{{ activity.data.name }}</strong>
+                                        {% elif activity.data.filename %}
+                                        • <i class="bi bi-file-pdf"></i> <strong>{{ activity.data.filename }}</strong>
+                                        {% endif %}
+                                    {% endif %}
                                 </div>
                             </div>
                             <div class="text-end">
@@ -218,8 +284,68 @@
                         </div>
                         
                         {% if activity.data %}
-                        <div class="mt-2 text-muted small">
-                            <pre class="mb-0" style="white-space: pre-wrap; background: rgba(0,0,0,0.05); padding: 8px; border-radius: 4px;">{{ activity.data|tojson(indent=2) }}</pre>
+                        <div class="mt-2">
+                            <details class="text-muted small">
+                                <summary style="cursor: pointer;" class="text-primary">
+                                    <i class="bi bi-info-circle"></i> View Details
+                                </summary>
+                                <div class="mt-2 p-2" style="background: rgba(0,0,0,0.03); border-radius: 4px; border-left: 3px solid #0d6efd;">
+                                    {% if activity.data.report_type %}
+                                    <div class="mb-2">
+                                        <strong><i class="bi bi-file-earmark-text-fill text-success"></i> Report Type:</strong> {{ activity.data.report_type }}
+                                    </div>
+                                    {% endif %}
+                                    {% if activity.data.file_type %}
+                                    <div class="mb-2">
+                                        <strong><i class="bi bi-filetype-{{ activity.data.file_type }}</i> Format:</strong> {{ activity.data.file_type|upper }}
+                                    </div>
+                                    {% endif %}
+                                    {% if activity.data.version %}
+                                    <div class="mb-2">
+                                        <strong><i class="bi bi-tag"></i> Version:</strong> {{ activity.data.version }}
+                                    </div>
+                                    {% endif %}
+                                    {% if activity.data.filename %}
+                                    <div class="mb-2">
+                                        <strong><i class="bi bi-file-earmark-pdf-fill text-danger"></i> File:</strong> {{ activity.data.filename }}
+                                    </div>
+                                    {% endif %}
+                                    {% if activity.data.work_id %}
+                                    <div class="mb-2">
+                                        <strong><i class="bi bi-folder"></i> Work ID:</strong> {{ activity.data.work_id }}
+                                    </div>
+                                    {% endif %}
+                                    {% if activity.data.extraction_id %}
+                                    <div class="mb-2">
+                                        <strong><i class="bi bi-cpu"></i> Extraction ID:</strong> {{ activity.data.extraction_id }}
+                                    </div>
+                                    {% endif %}
+                                    {% if activity.data.description %}
+                                    <div class="mb-2">
+                                        <strong><i class="bi bi-card-text"></i> Description:</strong> {{ activity.data.description }}
+                                    </div>
+                                    {% endif %}
+                                    {% if activity.data.status %}
+                                    <div class="mb-2">
+                                        <strong><i class="bi bi-info-circle"></i> Status:</strong> 
+                                        <span class="badge bg-{{ activity.data.status|status_badge }}">{{ activity.data.status|capitalize }}</span>
+                                    </div>
+                                    {% endif %}
+                                    
+                                    <!-- Show raw JSON for other data -->
+                                    {% set known_keys = ['filename', 'work_id', 'extraction_id', 'name', 'description', 'status', 'report_type', 'file_type', 'version', 'equipment_count'] %}
+                                    {% set other_data = {} %}
+                                    {% for key, value in activity.data.items() if key not in known_keys %}
+                                        {% set _ = other_data.update({key: value}) %}
+                                    {% endfor %}
+                                    {% if other_data %}
+                                    <div class="mt-2 pt-2" style="border-top: 1px solid rgba(0,0,0,0.1);">
+                                        <small class="text-muted">Additional Information:</small>
+                                        <pre class="mb-0 mt-1" style="white-space: pre-wrap; background: rgba(0,0,0,0.02); padding: 8px; border-radius: 4px; font-size: 0.8rem;">{{ other_data|tojson(indent=2) }}</pre>
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </details>
                         </div>
                         {% endif %}
                     </div>
@@ -239,15 +365,86 @@
             </div>
             {% endif %}
         </div>
+        
+        <!-- Pagination -->
+        {% if total_pages > 1 %}
+        <div class="card-footer bg-white border-top">
+            <div class="d-flex justify-content-between align-items-center">
+                <div class="text-muted small">
+                    Showing {{ (page - 1) * per_page + 1 }} to {{ [page * per_page, total_activities]|min }} of {{ total_activities }} activities
+                </div>
+                <nav aria-label="Page navigation">
+                    <ul class="pagination mb-0">
+                        <!-- Previous Button -->
+                        <li class="page-item {% if page <= 1 %}disabled{% endif %}">
+                            <a class="page-link" href="{% if page > 1 %}{{ url_for('works.work_history', days=days, work_id=selected_work_id, page=page-1) }}{% else %}#{% endif %}" aria-label="Previous">
+                                <span aria-hidden="true">&laquo; Previous</span>
+                            </a>
+                        </li>
+                        
+                        <!-- Page Numbers -->
+                        {% set start_page = [1, page - 2]|max %}
+                        {% set end_page = [total_pages, page + 2]|min %}
+                        
+                        {% if start_page > 1 %}
+                        <li class="page-item">
+                            <a class="page-link" href="{{ url_for('works.work_history', days=days, work_id=selected_work_id, page=1) }}">1</a>
+                        </li>
+                        {% if start_page > 2 %}
+                        <li class="page-item disabled"><span class="page-link">...</span></li>
+                        {% endif %}
+                        {% endif %}
+                        
+                        {% for p in range(start_page, end_page + 1) %}
+                        <li class="page-item {% if p == page %}active{% endif %}">
+                            <a class="page-link" href="{{ url_for('works.work_history', days=days, work_id=selected_work_id, page=p) }}">{{ p }}</a>
+                        </li>
+                        {% endfor %}
+                        
+                        {% if end_page < total_pages %}
+                        {% if end_page < total_pages - 1 %}
+                        <li class="page-item disabled"><span class="page-link">...</span></li>
+                        {% endif %}
+                        <li class="page-item">
+                            <a class="page-link" href="{{ url_for('works.work_history', days=days, work_id=selected_work_id, page=total_pages) }}">{{ total_pages }}</a>
+                        </li>
+                        {% endif %}
+                        
+                        <!-- Next Button -->
+                        <li class="page-item {% if page >= total_pages %}disabled{% endif %}">
+                            <a class="page-link" href="{% if page < total_pages %}{{ url_for('works.work_history', days=days, work_id=selected_work_id, page=page+1) }}{% else %}#{% endif %}" aria-label="Next">
+                                <span aria-hidden="true">Next &raquo;</span>
+                            </a>
+                        </li>
+                    </ul>
+                </nav>
+            </div>
+        </div>
+        {% endif %}
     </div>
 </div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
-    // Auto-refresh every 30 seconds
+    // Optional: Add real-time updates using WebSocket if needed
+    console.log('Work History page loaded');
+    
+    // Show loading indicator on form submit
+    document.getElementById('filterForm')?.addEventListener('submit', function() {
+        const btn = this.querySelector('button[type="submit"]');
+        if (btn) {
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Loading...';
+            btn.disabled = true;
+        }
+    });
+    
+    // Handle auto-refresh (optional - commented out by default)
+    // Uncomment to enable auto-refresh every 30 seconds
+    /*
     setTimeout(() => {
         location.reload();
     }, 30000);
+    */
 </script>
 {% endblock %}

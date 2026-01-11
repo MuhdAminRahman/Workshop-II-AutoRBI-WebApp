@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+{% extends 'base.html' %}
 
 {% block title %}Extract Equipment - {{ work.name }} - AutoRBI{% endblock %}
 
@@ -34,7 +34,12 @@
 
     <!-- Quick Stats (if equipment exists) -->
     {% if equipment %}
-    <div class="card border-0 shadow-sm mb-4">
+    <div class="card border-0 shadow-sm mb-4 border-success" style="border-width: 2px !important;">
+        <div class="card-header bg-success text-white">
+            <h5 class="mb-0">
+                <i class="bi bi-check-circle-fill"></i> Equipment Data Available
+            </h5>
+        </div>
         <div class="card-body">
             <div class="row text-center g-3">
                 <div class="col-md-6">
@@ -58,12 +63,28 @@
                     </div>
                 </div>
             </div>
+            <div class="text-center mt-4">
+                <a href="{{ url_for('works.review_data', work_id=work.id) }}" class="btn btn-success btn-lg px-5">
+                    <i class="bi bi-table"></i> Review & Edit Extracted Data
+                </a>
+                <a href="{{ url_for('works.work_history') }}?work_id={{ work.id }}" class="btn btn-outline-secondary btn-lg ms-2">
+                    <i class="bi bi-clock-history"></i> View History
+                </a>
+            </div>
         </div>
-        <div class="card-footer bg-light text-center py-3">
-            <a href="{{ url_for('works.review_data', work_id=work.id) }}" class="btn btn-primary btn-lg">
-                <i class="bi bi-table"></i> Review & Edit Data
-            </a>
-        </div>
+    </div>
+    
+    <!-- Separator -->
+    <div class="text-center my-4">
+        <span class="badge bg-secondary fs-6 px-4 py-2">OR</span>
+    </div>
+    
+    <!-- Add More Files Section -->
+    <div class="text-center mb-3">
+        <h5 class="text-muted">
+            <i class="bi bi-plus-circle"></i> Upload Additional GA Drawings
+        </h5>
+        <p class="small text-muted">Upload more PDF files to extract additional equipment data</p>
     </div>
     {% endif %}
 
@@ -432,11 +453,26 @@ document.addEventListener('DOMContentLoaded', function() {
             // Clear multi-file processing flag
             window.isMultiFileProcessing = false;
             
+            // Update status badge to completed now that all files are done
+            const statusBadge = document.getElementById('statusBadge');
+            if (statusBadge) {
+                statusBadge.className = 'badge fs-6 bg-success';
+                statusBadge.innerHTML = '<i class="bi bi-check-circle-fill me-2"></i> COMPLETED';
+            }
+            
+            // Show success section
+            const successSection = document.getElementById('successSection');
+            if (successSection) {
+                successSection.classList.remove('d-none');
+            }
+            
             // Show next button after all files
             const nextButtonContainer = document.getElementById('nextButtonContainer');
             if (nextButtonContainer) {
                 nextButtonContainer.classList.remove('d-none');
             }
+            
+            addLog('All extractions completed! Click Next to review the data.', 'info');
             
             // IMPORTANT: Return here to prevent form from submitting normally
             return;
@@ -505,6 +541,19 @@ async function pollExtractionUntilComplete(extractionId, fileName) {
                     if (!completionLogged) {
                         addLog(`✓ Completed: ${fileName} (${data.equipment_count || 0} equipment)`, 'success');
                         completionLogged = true;
+                        
+                        // Log extraction completion activity
+                        fetch('{{ url_for('works.log_extraction_completion') }}', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                work_id: {{ work.id }},
+                                extraction_id: extractionId,
+                                equipment_count: data.equipment_count || 0
+                            })
+                        }).catch(err => console.error('Failed to log extraction activity:', err));
                     }
                     resolve(true);
                 } else if (status === 'failed' || status === 'error') {
@@ -773,11 +822,29 @@ function updateProgress(data) {
             pollInterval = null;
         }
         
+        // Skip UI updates during multi-file processing
+        if (window.isMultiFileProcessing) {
+            return; // Let the multi-file handler manage completion
+        }
+        
         // Prevent duplicate completion messages
         if (window.extractionCompleted) {
             return; // Already processed completion
         }
         window.extractionCompleted = true;
+        
+        // Log extraction completion activity
+        fetch('{{ url_for('works.log_extraction_completion') }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                work_id: {{ work.id }},
+                extraction_id: extractionId,
+                equipment_count: data.equipment_count || 0
+            })
+        }).catch(err => console.error('Failed to log extraction activity:', err));
         
         if (statusBadge) {
             statusBadge.innerHTML = '<i class="bi bi-check-circle-fill me-2"></i> COMPLETED';
@@ -799,8 +866,8 @@ function updateProgress(data) {
             equipmentCount.textContent = data.equipment_count || 0;
         }
         
-        // Only show Next button if not in multi-file processing mode
-        if (nextButtonContainer && !window.isMultiFileProcessing) {
+        // Show Next button for single file extraction
+        if (nextButtonContainer) {
             nextButtonContainer.classList.remove('d-none');
             addLog(`✓ Extraction completed! ${data.equipment_count || 0} equipment items extracted.`, 'success');
             addLog('Click the Next button to review and edit component data.', 'info');

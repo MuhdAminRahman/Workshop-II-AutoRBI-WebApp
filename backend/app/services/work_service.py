@@ -10,8 +10,26 @@ from sqlalchemy.orm import Session
 from app.models.work import Work, WorkStatus
 from app.models.equipment import Equipment
 from app.models.file import File
+from app.models.activity import Activity, EntityType, ActivityAction
 
 logger = logging.getLogger(__name__)
+
+
+def log_activity(db: Session, user_id: int, entity_type: str, entity_id: int, action: str, data: Optional[dict] = None):
+    """Helper to log activities"""
+    try:
+        activity = Activity(
+            user_id=user_id,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            action=action,
+            data=data
+        )
+        db.add(activity)
+        db.commit()
+    except Exception as e:
+        logger.warning(f"Failed to log activity: {str(e)}")
+        db.rollback()
 
 # ============================================================================
 # CREATE WORK
@@ -59,6 +77,16 @@ def create_work(
         db.add(new_work)
         db.commit()
         db.refresh(new_work)
+        
+        # Log activity
+        log_activity(
+            db=db,
+            user_id=user_id,
+            entity_type=EntityType.WORK.value,
+            entity_id=new_work.id,
+            action=ActivityAction.CREATED.value,
+            data={"name": name, "description": description}
+        )
         
         logger.info(f"✅ Work created: {name} (ID: {new_work.id})")
         
@@ -192,15 +220,30 @@ def update_work(
         return None, "Work not found or you don't have permission"
     
     try:
+        changes = {}
         if name is not None:
+            changes['name'] = name
             work.name = name
         if description is not None:
+            changes['description'] = description
             work.description = description
         if status is not None:
+            changes['status'] = status
             work.status = status
         
         db.commit()
         db.refresh(work)
+        
+        # Log activity
+        if changes:
+            log_activity(
+                db=db,
+                user_id=user_id,
+                entity_type=EntityType.WORK.value,
+                entity_id=work_id,
+                action=ActivityAction.UPDATED.value,
+                data=changes
+            )
         
         logger.info(f"✅ Work updated: {work.name} (ID: {work.id})")
         
@@ -246,6 +289,19 @@ def delete_work(
         return False, "Work not found or you don't have permission"
     
     try:
+        work_name = work.name
+        work_id_to_log = work.id
+        
+        # Log activity before deleting
+        log_activity(
+            db=db,
+            user_id=user_id,
+            entity_type=EntityType.WORK.value,
+            entity_id=work_id_to_log,
+            action=ActivityAction.DELETED.value,
+            data={"name": work_name}
+        )
+        
         # Cascade delete handles related records:
         # - equipment → components
         # - extractions
@@ -253,7 +309,7 @@ def delete_work(
         db.delete(work)
         db.commit()
         
-        logger.info(f"✅ Work deleted: {work.name} (ID: {work.id})")
+        logger.info(f"✅ Work deleted: {work_name} (ID: {work_id_to_log})")
         
         return True, None
     

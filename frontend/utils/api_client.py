@@ -332,6 +332,32 @@ class BackendAPI:
         """Get activity logs for a specific work"""
         return self._get(f'/api/history/work/{work_id}')
     
+    def log_activity(self, user_id: int, entity_type: str, entity_id: int, 
+                     action: str, data: Dict = None) -> Dict:
+        """
+        Log an activity to the history.
+        
+        Args:
+            user_id: ID of user performing the action
+            entity_type: Type of entity (work, equipment, component, file, extraction)
+            entity_id: ID of the entity
+            action: Action performed (created, updated, deleted, status_changed)
+            data: Optional additional data about the activity
+        
+        Returns:
+            Activity response or error
+        """
+        payload = {
+            'user_id': user_id,
+            'entity_type': entity_type,
+            'entity_id': entity_id,
+            'action': action
+        }
+        if data:
+            payload['data'] = data
+        
+        return self._post('/api/history/log', data=payload)
+    
     # ============================================================================
     # USER MANAGEMENT (Admin)
     # ============================================================================

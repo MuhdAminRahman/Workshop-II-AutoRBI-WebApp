@@ -77,8 +77,11 @@ def view_reports(work_id):
 @login_required
 def generate_powerpoint(work_id):
     """Generate PowerPoint report"""
+    from flask import session
     token = get_auth_token()
     api = BackendAPI(token)
+    current_user = session.get('user', {})
+    user_id = current_user.get('id')
     
     response = api.generate_ppt_report(work_id)
     
@@ -87,6 +90,24 @@ def generate_powerpoint(work_id):
     else:
         version = response.get('version', 'new')
         flash(f'PowerPoint report version {version} generated successfully!', 'success')
+        
+        # Log activity
+        try:
+            if user_id:
+                api.log_activity(
+                    user_id=user_id,
+                    entity_type='file',
+                    entity_id=response.get('file_id', 0),
+                    action='created',
+                    data={
+                        'work_id': work_id,
+                        'file_type': 'powerpoint',
+                        'version': version,
+                        'report_type': 'PowerPoint Report'
+                    }
+                )
+        except Exception as e:
+            print(f"Failed to log activity: {e}")
     
     return redirect(url_for('reports.view_reports', work_id=work_id))
 
@@ -94,8 +115,11 @@ def generate_powerpoint(work_id):
 @login_required
 def generate_excel_report(work_id):
     """Generate Excel report"""
+    from flask import session
     token = get_auth_token()
     api = BackendAPI(token)
+    current_user = session.get('user', {})
+    user_id = current_user.get('id')
     
     response = api.generate_excel_report(work_id)
     
@@ -104,6 +128,24 @@ def generate_excel_report(work_id):
     else:
         version = response.get('version', 'new')
         flash(f'Excel report version {version} generated successfully!', 'success')
+        
+        # Log activity
+        try:
+            if user_id:
+                api.log_activity(
+                    user_id=user_id,
+                    entity_type='file',
+                    entity_id=response.get('file_id', 0),
+                    action='created',
+                    data={
+                        'work_id': work_id,
+                        'file_type': 'excel',
+                        'version': version,
+                        'report_type': 'Excel Report'
+                    }
+                )
+        except Exception as e:
+            print(f"Failed to log activity: {e}")
     
     return redirect(url_for('reports.view_reports', work_id=work_id))
 
