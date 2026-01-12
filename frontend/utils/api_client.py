@@ -138,9 +138,12 @@ class BackendAPI:
         return self._post('/api/auth/logout')
     
     # Works endpoints
-    def get_works(self, skip: int = 0, limit: int = 100) -> Dict:
+    def get_works(self, skip: int = 0, limit: int = 100, all_users: bool = False) -> Dict:
         """Get list of works"""
-        return self._get('/api/works', params={'skip': skip, 'limit': limit})
+        params = {'skip': skip, 'limit': limit}
+        if all_users:
+            params['all_users'] = 'true'
+        return self._get('/api/works', params=params)
     
     def create_work(self, name: str, description: str = '') -> Dict:
         """Create a new work"""
@@ -166,6 +169,49 @@ class BackendAPI:
     def delete_work(self, work_id: int) -> Dict:
         """Delete work"""
         return self._delete(f'/api/works/{work_id}')
+    
+    # Admin Works endpoints
+    def admin_get_all_works(self, skip: int = 0, limit: int = 100) -> Dict:
+        """Admin: Get all works from all users"""
+        return self._get('/api/admin/works', params={'skip': skip, 'limit': limit})
+    
+    def admin_get_user_works(self, user_id: int, skip: int = 0, limit: int = 100) -> Dict:
+        """Admin: Get works for specific user"""
+        return self._get(f'/api/admin/users/{user_id}/works', params={'skip': skip, 'limit': limit})
+    
+    def admin_assign_work(self, work_id: int, user_ids: List[int]) -> Dict:
+        """Admin: Assign existing work to engineers"""
+        data = {
+            'work_id': work_id,
+            'user_ids': user_ids
+        }
+        return self._post('/api/admin/works/assign', data=data)
+    
+    def add_collaborator(self, work_id: int, email: str, role: str = 'editor') -> Dict:
+        """Add collaborator to work"""
+        return self._post(f'/api/works/{work_id}/collaborators?email={email}&role={role}')
+    
+    def get_work_collaborators(self, work_id: int) -> Dict:
+        """Get all collaborators for a work"""
+        return self._get(f'/api/works/{work_id}/collaborators')
+    
+    def admin_update_work(self, work_id: int, name: str = None, description: str = None, 
+                         status: str = None, user_id: int = None) -> Dict:
+        """Admin: Update work"""
+        data = {}
+        if name is not None:
+            data['name'] = name
+        if description is not None:
+            data['description'] = description
+        if status is not None:
+            data['status'] = status
+        if user_id is not None:
+            data['user_id'] = user_id
+        return self._put(f'/api/admin/works/{work_id}', data=data)
+    
+    def admin_delete_work(self, work_id: int) -> Dict:
+        """Admin: Delete work"""
+        return self._delete(f'/api/admin/works/{work_id}')
     
     # Extraction endpoints
     def start_extraction(self, work_id: int, file) -> Dict:
@@ -379,7 +425,8 @@ class BackendAPI:
             'full_name': full_name,
             'role': role
         }
-        return self._post('/api/users', data=data)
+        # Use the auth/register endpoint which handles user creation
+        return self._post('/api/auth/register', data=data)
     
     def update_user(self, user_id: int, username: str = None, email: str = None, 
                    full_name: str = None, role: str = None, is_active: bool = None) -> Dict:
@@ -396,6 +443,14 @@ class BackendAPI:
         if is_active is not None:
             data['is_active'] = is_active
         return self._put(f'/api/users/{user_id}', data=data)
+    
+    def deactivate_user(self, user_id: int) -> Dict:
+        """Deactivate user (Admin only)"""
+        return self._put(f'/api/users/{user_id}/deactivate', data={})
+    
+    def reactivate_user(self, user_id: int) -> Dict:
+        """Reactivate user (Admin only)"""
+        return self._put(f'/api/users/{user_id}/reactivate', data={})
     
     def delete_user(self, user_id: int) -> Dict:
         """Delete user (Admin only)"""

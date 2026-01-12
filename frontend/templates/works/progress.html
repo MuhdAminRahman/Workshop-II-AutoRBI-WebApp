@@ -4,15 +4,6 @@
 
 {% block content %}
 <div class="extraction-progress-page">
-    <!-- Breadcrumb -->
-    <nav aria-label="breadcrumb" class="mb-3">
-        <ol class="breadcrumb">
-            <li class="breadcrumb-item"><a href="{{ url_for('works.list_works') }}">Works</a></li>
-            <li class="breadcrumb-item"><a href="{{ url_for('works.extract_page', work_id=work.id) }}">{{ work.name }}</a></li>
-            <li class="breadcrumb-item active">Extraction Progress</li>
-        </ol>
-    </nav>
-
     <!-- Page Header -->
     <div class="mb-4">
         <h2 class="fw-bold">

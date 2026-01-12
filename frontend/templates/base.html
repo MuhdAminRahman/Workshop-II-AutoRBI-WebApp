@@ -32,14 +32,9 @@
             <h2 class="mb-0 fw-bold">AutoRBI</h2>
         </div>
         <ul class="sidebar-menu">
-            <li>
-                <a href="{{ url_for('main.dashboard') }}" class="{% if request.endpoint == 'main.dashboard' %}active{% endif %}">
-                    <i class="bi bi-speedometer2"></i> Dashboard
-                </a>
-            </li>
             {% if session.user.role == 'Admin' %}
             <li>
-                <a href="{{ url_for('admin.admin_dashboard') }}" class="{% if request.endpoint and 'admin' in request.endpoint %}active{% endif %}">
+                <a href="{{ url_for('admin.admin_dashboard') }}" class="{% if request.endpoint == 'admin.admin_dashboard' %}active{% endif %}">
                     <i class="bi bi-shield-check"></i> Admin Panel
                 </a>
             </li>
@@ -48,10 +43,16 @@
                     <i class="bi bi-people"></i> User Management
                 </a>
             </li>
+            {% else %}
+            <li>
+                <a href="{{ url_for('main.dashboard') }}" class="{% if request.endpoint == 'main.dashboard' %}active{% endif %}">
+                    <i class="bi bi-speedometer2"></i> Dashboard
+                </a>
+            </li>
             {% endif %}
             <li>
                 <a href="{{ url_for('works.list_works') }}" class="{% if request.endpoint and 'works' in request.endpoint and request.endpoint != 'works.work_history' %}active{% endif %}">
-                    <i class="bi bi-folder"></i> Works
+                    <i class="bi bi-folder"></i> {% if session.user.role == 'Admin' %}Work Management{% else %}Works{% endif %}
                 </a>
             </li>
             <li>
@@ -60,7 +61,7 @@
                 </a>
             </li>
             <li>
-                <a href="{{ url_for('analytics.index') }}" class="{% if request.endpoint and 'analytics' in request.endpoint %}active{% endif %}">
+                <a href="{% if session.user.role == 'Admin' %}{{ url_for('admin.admin_analytics') }}{% else %}{{ url_for('analytics.index') }}{% endif %}" class="{% if request.endpoint and 'analytics' in request.endpoint %}active{% endif %}">
                     <i class="bi bi-graph-up"></i> Analytics
                 </a>
             </li>

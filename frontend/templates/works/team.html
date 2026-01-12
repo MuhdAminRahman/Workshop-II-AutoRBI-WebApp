@@ -1,0 +1,453 @@
+{% extends "base.html" %}
+
+{% block title %}Team - {{ work['name'] }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2><i class="bi bi-people-fill"></i> Work Team</h2>
+        </div>
+        <div>
+            <a href="{{ url_for('works.list_works') }}" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left"></i> Back to Works Management
+            </a>
+        </div>
+    </div>
+
+    <!-- Work Info Card -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <h4 class="card-title mb-3">
+                <i class="bi bi-briefcase"></i> {{ work['name'] }}
+                <span class="badge bg-{{ 'success' if work['status'] == 'completed' else 'info' }} ms-2">
+                    {{ work['status']|capitalize }}
+                </span>
+            </h4>
+            {% if work.get('description') %}
+            <p class="card-text text-muted">{{ work['description'] }}</p>
+            {% endif %}
+            <div class="row mt-3">
+                <div class="col-md-6">
+                    <small class="text-muted">Created: {{ work['created_at']|datetime }}</small>
+                </div>
+                {% if work.get('updated_at') %}
+                <div class="col-md-6 text-end">
+                    <small class="text-muted">Updated: {{ work['updated_at']|datetime }}</small>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Team Members Table -->
+    <div class="card mb-4">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0">
+                <i class="bi bi-people"></i> Team Members
+                {% if collaborators %}
+                <span class="badge bg-light text-dark ms-2">{{ collaborators|length }}</span>
+                {% endif %}
+            </h5>
+        </div>
+        <div class="card-body p-0">
+            {% if collaborators %}
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width: 5%;">#</th>
+                            <th style="width: 25%;">Name</th>
+                            <th style="width: 30%;">Email</th>
+                            <th style="width: 20%;">Role</th>
+                            <th style="width: 20%;">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for collab in collaborators %}
+                        <tr>
+                            <td>{{ loop.index }}</td>
+                            <td>
+                                <strong>{{ collab.get('full_name') or collab['email'].split('@')[0] }}</strong>
+                            </td>
+                            <td>
+                                <a href="mailto:{{ collab['email'] }}" class="text-decoration-none">
+                                    <i class="bi bi-envelope"></i> {{ collab['email'] }}
+                                </a>
+                            </td>
+                            <td>
+                                {% if collab['role'] == 'owner' %}
+                                <span class="badge bg-danger">
+                                    <i class="bi bi-star-fill"></i> Owner
+                                </span>
+                                {% elif collab['role'] == 'editor' %}
+                                <span class="badge bg-info">
+                                    <i class="bi bi-pencil"></i> Engineer
+                                </span>
+                                {% else %}
+                                <span class="badge bg-secondary">{{ collab['role']|capitalize }}</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="badge bg-success">
+                                    <i class="bi bi-check-circle"></i> Active
+                                </span>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center py-5">
+                <i class="bi bi-people text-muted" style="font-size: 4rem;"></i>
+                <h5 class="text-muted mt-3">No Team Members Available</h5>
+                <p class="text-muted">
+                    Team members cannot be displayed at this time due to a backend API issue.
+                </p>
+                <div class="alert alert-warning mt-3 mx-auto" style="max-width: 600px;">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    <strong>Known Issue:</strong> The backend's GET collaborators endpoint is returning an internal server error.
+                    Engineers were successfully assigned to this work, but the backend needs to be updated to properly fetch and display team members.
+                </div>
+                <p class="text-muted small mt-3">
+                    <i class="bi bi-info-circle"></i> 
+                    Check the activity history to see who was assigned to this work.
+                </p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Work Timeline -->
+    <div class="card mb-4">
+        <div class="card-header bg-info text-white">
+            <h5 class="mb-0">
+                <i class="bi bi-diagram-3"></i> Work Timeline
+            </h5>
+        </div>
+        <div class="card-body">
+            <div class="timeline">
+                <!-- Stage 1: Created -->
+                <div class="timeline-item">
+                    <div class="timeline-marker" id="stage-created">
+                        <span class="timeline-icon">
+                            <i class="bi bi-circle text-secondary" aria-hidden="true"></i>
+                        </span>
+                    </div>
+                    <div class="timeline-content">
+                        <h6 class="mb-1">Work Created</h6>
+                        <p class="text-muted small mb-0">{{ work['created_at']|datetime }}</p>
+                    </div>
+                </div>
+
+                <!-- Stage 2: Extraction -->
+                <div class="timeline-item">
+                    <div class="timeline-marker" id="stage-extraction">
+                        <span class="timeline-icon">
+                            <i class="bi bi-circle text-secondary" aria-hidden="true"></i>
+                        </span>
+                    </div>
+                    <div class="timeline-content">
+                        <h6 class="mb-1">Equipment Extraction</h6>
+                        <p class="text-muted small mb-2">Extract data from PDF documents</p>
+                        <div id="extraction-equipments" class="ms-0">
+                            <!-- Equipment extraction status will be shown here -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Stage 3: Excel -->
+                <div class="timeline-item">
+                    <div class="timeline-marker" id="stage-excel">
+                        <span class="timeline-icon">
+                            <i class="bi bi-circle text-secondary" aria-hidden="true"></i>
+                        </span>
+                    </div>
+                    <div class="timeline-content">
+                        <h6 class="mb-1">Excel Report</h6>
+                        <p class="text-muted small mb-0">Generate structured data in Excel format</p>
+                    </div>
+                </div>
+
+                <!-- Stage 4: PowerPoint -->
+                <div class="timeline-item">
+                    <div class="timeline-marker" id="stage-ppt">
+                        <span class="timeline-icon">
+                            <i class="bi bi-circle text-secondary" aria-hidden="true"></i>
+                        </span>
+                    </div>
+                    <div class="timeline-content">
+                        <h6 class="mb-1">PowerPoint Report</h6>
+                        <p class="text-muted small mb-0">Create visual presentation from data</p>
+                    </div>
+                </div>
+
+                <!-- Stage 5: Completed -->
+                <div class="timeline-item">
+                    <div class="timeline-marker" id="stage-completed">
+                        <span class="timeline-icon">
+                            <i class="bi bi-circle text-secondary" aria-hidden="true"></i>
+                        </span>
+                    </div>
+                    <div class="timeline-content">
+                        <h6 class="mb-1">Work Completed</h6>
+                        <p class="text-muted small mb-0">All tasks finished successfully</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+.timeline {
+    position: relative;
+    padding: 20px 0;
+}
+
+.timeline::before {
+    content: '';
+    position: absolute;
+    left: 25px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: linear-gradient(to bottom, #0d6efd, #6c757d);
+}
+
+.timeline-item {
+    display: flex;
+    margin-bottom: 30px;
+    position: relative;
+}
+
+.timeline-marker {
+    position: relative;
+    z-index: 2;
+    flex-shrink: 0;
+    width: 50px;
+    height: 50px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.timeline-icon {
+    font-size: 24px;
+}
+
+.timeline-marker[data-state="done"] .timeline-icon {
+    color: #198754;
+}
+
+.timeline-marker[data-state="failed"] .timeline-icon {
+    color: #dc3545;
+}
+
+.timeline-marker[data-state="pending"] .timeline-icon {
+    color: #6c757d;
+}
+
+.timeline-content {
+    flex-grow: 1;
+    padding-left: 20px;
+    padding-top: 5px;
+}
+
+.timeline-content h6 {
+    font-weight: 600;
+    color: inherit;
+    margin: 0;
+}
+
+.timeline-content .text-muted {
+    font-size: 0.875rem;
+}
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function(){
+    try {
+        const work = {{ work|tojson }};
+        const authToken = {{ auth_token|tojson }};
+        const backendApiUrl = {{ backend_api_url|tojson }};
+        const equipmentsList = {{ equipments|tojson }};
+        
+        console.log('team.html timeline initialized for work', work.id);
+        console.log('Equipment list:', equipmentsList);
+
+        // Helper: Set badge state
+        function setBadge(elId, state) {
+            const el = document.getElementById(elId);
+            if (!el) return;
+            el.dataset.state = state;
+            let icon = '';
+            if (state === 'done') icon = '<i class="bi bi-check-circle-fill text-success" aria-hidden="true"></i>';
+            else if (state === 'failed') icon = '<i class="bi bi-x-circle-fill text-danger" aria-hidden="true"></i>';
+            else icon = '<i class="bi bi-circle text-secondary" aria-hidden="true"></i>';
+            el.innerHTML = `<span class="timeline-icon">${icon}</span>`;
+            el.setAttribute('aria-label', state);
+        }
+
+        // Set initial state: Created
+        if (work.created_at) setBadge('stage-created', 'done');
+
+        // Display equipment extraction status
+        function displayEquipmentStatus() {
+            const container = document.getElementById('extraction-equipments');
+            if (!container) return;
+            
+            if (!equipmentsList || equipmentsList.length === 0) {
+                container.innerHTML = '<small class="text-muted">No equipment assigned</small>';
+                return;
+            }
+            
+            let html = '';
+            let extractedCount = 0;
+            const totalCount = equipmentsList.length;
+            
+            for (const equipment of equipmentsList) {
+                const isExtracted = equipment.extracted_date !== null && equipment.extracted_date !== undefined;
+                if (isExtracted) extractedCount++;
+                
+                const icon = isExtracted
+                    ? '<i class="bi bi-check-circle-fill text-success"></i>' 
+                    : '<i class="bi bi-circle text-secondary"></i>';
+                const status = isExtracted ? '✓ Extracted' : '⏳ Pending';
+                html += `<div class="small mb-1">${icon} <strong>${equipment.equipment_number}</strong>: ${status}</div>`;
+            }
+            
+            // Add summary
+            html += `<div class="small text-info mt-2"><i class="bi bi-info-circle"></i> ${extractedCount}/${totalCount} equipment extracted</div>`;
+            
+            container.innerHTML = html;
+        }
+
+        // Check extraction status - use server-side data first, then API fallback
+        function checkExtractionStatus() {
+            console.log('Checking extraction status...');
+            
+            // If we have extraction data from the server, use it immediately
+            if (latestExtractionData && latestExtractionData.extraction_id) {
+                console.log('Using server-side extraction data:', latestExtractionData);
+                const status = String(latestExtractionData.status).toLowerCase();
+                
+                // Check if all engineers have completed
+                if (allEngineersCompleted()) {
+                    setBadge('stage-extraction', 'done');
+                    console.log('✅ All engineers have completed extraction');
+                } else if (['completed', 'done'].includes(status)) {
+                    // Extraction exists but not all engineers done yet
+                    setBadge('stage-extraction', 'pending');
+                    console.log('⏳ Extraction in progress but not all engineers completed');
+                } else if (['in_progress', 'processing'].includes(status)) {
+                    setBadge('stage-extraction', 'pending');
+                } else if (['failed'].includes(status)) {
+                    setBadge('stage-extraction', 'failed');
+                } else {
+                    setBadge('stage-extraction', 'pending');
+                }
+                
+                return Promise.resolve(latestExtractionData);
+            }
+            
+            // No extraction data - all engineers pending
+            setBadge('stage-extraction', 'pending');
+            return Promise.resolve(null);
+        }
+
+        // Check masterfile status (Excel and PPT)
+        function checkMasterfileStatus() {
+            if (!work.excel_masterfile_url) {
+                setBadge('stage-excel', 'pending');
+            } else {
+                setBadge('stage-excel', 'done');
+            }
+
+            if (!work.ppt_template_url) {
+                setBadge('stage-ppt', 'pending');
+            } else {
+                setBadge('stage-ppt', 'done');
+            }
+        }
+
+        // Check work completion status
+        function checkCompletionStatus() {
+            const createdDone = document.getElementById('stage-created')?.dataset.state === 'done';
+            const extractionDone = document.getElementById('stage-extraction')?.dataset.state === 'done';
+            const excelDone = document.getElementById('stage-excel')?.dataset.state === 'done';
+            const pptDone = document.getElementById('stage-ppt')?.dataset.state === 'done';
+
+            if (work.status === 'completed') {
+                setBadge('stage-completed', 'done');
+            } else if (createdDone && extractionDone && excelDone && pptDone) {
+                setBadge('stage-completed', 'done');
+            } else {
+                setBadge('stage-completed', 'pending');
+            }
+        }
+
+        // Main loop: poll equipment extraction status periodically
+        function startPolling() {
+            // Function to check extraction status
+            function checkExtractionStatus() {
+                console.log('Polling equipment extraction status...');
+                
+                // Call local Flask endpoint (no CORS issues)
+                const pollUrl = `/works/${work.id}/extraction-status`;
+                
+                fetch(pollUrl)
+                    .then(r => r.json())
+                    .then(data => {
+                        console.log('Poll response:', data);
+                        if (data && !data.error) {
+                            // Update the cached equipment list
+                            if (data.all_extracted) {
+                                console.log(`📊 Fetching updated equipment list...`);
+                                // Re-fetch equipment list to get latest data
+                                fetch(`/works/${work.id}/extraction-status`)
+                                    .then(r => r.json())
+                                    .then(updatedData => {
+                                        // Update display
+                                        displayEquipmentStatus();
+                                        
+                                        // If all 10 equipments are extracted
+                                        if (updatedData.extracted_count === 10 && updatedData.total_equipments === 10) {
+                                            setBadge('stage-extraction', 'done');
+                                            console.log(`✅ All ${updatedData.total_equipments} equipments extracted!`);
+                                            checkCompletionStatus();
+                                        }
+                                    });
+                            } else {
+                                console.log(`📊 Equipment extraction: ${data.extracted_count}/${data.total_equipments} extracted`);
+                            }
+                        }
+                    })
+                    .catch(err => console.log('Poll error:', err.message));
+            }
+            
+            // Check immediately when page loads (no delay)
+            checkExtractionStatus();
+            
+            // Then refresh every 5 seconds
+            setInterval(checkExtractionStatus, 5000);
+        }
+
+        // Initial display and check
+        displayEquipmentStatus();
+        checkMasterfileStatus();
+        checkCompletionStatus();
+        // Start polling for extraction status changes (includes immediate check)
+        startPolling();
+    } catch (err) {
+        console.error('Timeline error:', err);
+    }
+})();
+</script>
+{% endblock %}

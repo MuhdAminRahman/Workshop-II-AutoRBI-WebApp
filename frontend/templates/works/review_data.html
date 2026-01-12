@@ -4,15 +4,6 @@
 
 {% block content %}
 <div class="review-data-page">
-    <!-- Breadcrumb -->
-    <nav aria-label="breadcrumb" class="mb-3">
-        <ol class="breadcrumb">
-            <li class="breadcrumb-item"><a href="{{ url_for('works.list_works') }}">Works</a></li>
-            <li class="breadcrumb-item"><a href="{{ url_for('works.view_work', work_id=work.id) }}">{{ work.name }}</a></li>
-            <li class="breadcrumb-item active">Review Data</li>
-        </ol>
-    </nav>
-
     <!-- Page Header -->
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
@@ -117,7 +108,7 @@
                                 <th colspan="2" class="text-center" style="border-bottom: 1px solid #000;">OPERATING</th>
                             </tr>
                             <tr>
-                                <th class="text-center" style="min-width: 120px;">TYPE</th>
+                                <th class="text-center text-muted" style="min-width: 120px;"><span class="text-decoration-line-through">TYPE</span></th>
                                 <th class="text-center" style="min-width: 100px;">SPEC.</th>
                                 <th class="text-center" style="min-width: 80px;">GRADE</th>
                                 <th class="text-center" style="min-width: 100px;">TEMP.<br>(°C)</th>
@@ -144,9 +135,10 @@
                                     <td><input type="text" class="form-control form-control-sm editable-field" 
                                                data-field="fluid" value="{{ component.fluid or '' }}" 
                                                data-original="{{ component.fluid or '' }}"></td>
-                                    <td><input type="text" class="form-control form-control-sm editable-field" 
+                                    <td><input type="text" class="form-control form-control-sm editable-field disabled-field" 
                                                data-field="material_type" value="{{ component.material_type or '' }}"
-                                               data-original="{{ component.material_type or '' }}"></td>
+                                               data-original="{{ component.material_type or '' }}"
+                                               disabled></td>
                                     <td><input type="text" class="form-control form-control-sm editable-field" 
                                                data-field="material_spec" value="{{ component.material_spec or '' }}"
                                                data-original="{{ component.material_spec or '' }}"></td>
@@ -307,6 +299,24 @@
         border-color: #198754;
     }
 
+    .editable-field.empty {
+        background-color: #f8d7da;
+        border-color: #dc3545;
+    }
+
+    .editable-field.disabled-field {
+        background-color: #e9ecef;
+        color: #6c757d;
+        cursor: not-allowed;
+        opacity: 0.7;
+    }
+
+    .editable-field.disabled-field:focus {
+        background-color: #e9ecef;
+        border-color: #ced4da;
+        box-shadow: none;
+    }
+
     .sticky-top {
         position: sticky;
         top: 56px;
@@ -369,7 +379,24 @@
         color: #fff;
     }
 
-    [data-theme="dark"] .component-row:hover {
+    [data-theme="dark"] .editable-field.empty {
+        background-color: #7a2e35;
+        border-color: #dc3545;
+        color: #fff;
+    }
+
+    [data-theme="dark"] .editable-field.disabled-field {
+        background-color: #495057;
+        color: #adb5bd;
+        cursor: not-allowed;
+        opacity: 0.7;
+    }
+
+    [data-theme="dark"] .editable-field.disabled-field:focus {
+        background-color: #495057;
+        border-color: #6c757d;
+        box-shadow: none;
+    }
         background-color: rgba(66, 153, 225, 0.15) !important;
     }
 
@@ -413,10 +440,17 @@ function initializeData() {
             const value = field.value.trim();
             originalData[key][fieldName] = value;
             
+            // Skip material_type field as it's disabled and not required
+            if (fieldName === 'material_type') {
+                return;
+            }
+            
             if (!value) {
                 emptyFields++;
+                field.classList.add('empty');
             } else {
                 filledFields++;
+                field.classList.add('valid');
             }
         });
         
@@ -457,6 +491,17 @@ function handleFieldChange(e) {
     const originalValue = field.dataset.original || '';
     const currentValue = field.value.trim();
     
+    // Skip highlighting for material_type field as it's disabled and not required
+    if (fieldName !== 'material_type') {
+        // Update empty/valid highlighting
+        field.classList.remove('error', 'valid', 'empty');
+        if (!currentValue) {
+            field.classList.add('empty');
+        } else {
+            field.classList.add('valid');
+        }
+    }
+    
     // Mark as modified if changed
     if (currentValue !== originalValue) {
         field.classList.add('modified');
@@ -482,9 +527,15 @@ function validateField(field) {
     const fieldName = field.dataset.field;
     const value = field.value.trim();
     
-    field.classList.remove('error', 'valid');
+    field.classList.remove('error', 'valid', 'empty');
     
-    // Basic validation
+    // Check if field is empty
+    if (!value) {
+        field.classList.add('empty');
+        return false;
+    }
+    
+    // Basic validation for numeric fields
     if (fieldName.includes('temp') || fieldName.includes('pressure')) {
         // Check if it's a valid number or has units
         if (value && !(/^-?\d+(\.\d+)?/.test(value))) {
@@ -494,10 +545,7 @@ function validateField(field) {
         }
     }
     
-    if (value) {
-        field.classList.add('valid');
-    }
-    
+    field.classList.add('valid');
     return true;
 }
 

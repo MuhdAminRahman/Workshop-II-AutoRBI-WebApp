@@ -4,15 +4,6 @@
 
 {% block content %}
 <div class="editor-page">
-    <!-- Breadcrumb -->
-    <nav aria-label="breadcrumb" class="mb-3">
-        <ol class="breadcrumb">
-            <li class="breadcrumb-item"><a href="{{ url_for('reports.index') }}">Reports</a></li>
-            <li class="breadcrumb-item"><a href="{{ url_for('reports.view_reports', work_id=work.id) }}">{{ work.name }}</a></li>
-            <li class="breadcrumb-item active">Edit Excel v{{ version }}</li>
-        </ol>
-    </nav>
-
     <!-- Page Header -->
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2 class="fw-bold mb-0">
@@ -23,7 +14,7 @@
                 <i class="bi bi-save"></i> Save Changes
             </button>
             <a href="{{ url_for('reports.view_reports', work_id=work.id) }}" class="btn btn-outline-secondary">
-                <i class="bi bi-x"></i> Cancel
+                <i class="bi bi-arrow-left"></i> Back to Reports
             </a>
         </div>
     </div>

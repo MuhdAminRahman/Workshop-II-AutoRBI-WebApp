@@ -28,15 +28,16 @@ class UserRegisterRequest(BaseModel):
     full_name: str = Field(..., min_length=2, max_length=100)
     """Full name (2-100 characters)"""
 
-    role: str=Field(..., min_length=2, max_length=100)
-    """User Role(Engineer,Admin)"""
+    role: str = Field(..., min_length=2, max_length=100)
+    """User Role (Engineer, Admin)"""
     
     class Config:
         example = {
             "username": "engineer1",
             "email": "engineer@company.com",
             "password": "SecurePassword123",
-            "full_name": "John Engineer"
+            "full_name": "John Engineer",
+            "role": "Engineer"
         }
 
 
@@ -53,6 +54,34 @@ class UserLoginRequest(BaseModel):
         example = {
             "username": "engineer1",
             "password": "SecurePassword123"
+        }
+
+
+class UserUpdateRequest(BaseModel):
+    """User update request"""
+    
+    full_name: Optional[str] = Field(None, min_length=2, max_length=100)
+    """Full name (optional, 2-100 characters)"""
+    
+    role: Optional[str] = Field(None, min_length=2, max_length=100)
+    """User role (optional, 'Engineer' or 'Admin')"""
+    
+    class Config:
+        example = {
+            "full_name": "John Updated",
+            "role": "Admin"
+        }
+
+
+class UserStatusRequest(BaseModel):
+    """Request to change user active status"""
+    
+    is_active: bool
+    """Whether user should be active or deactivated"""
+    
+    class Config:
+        example = {
+            "is_active": False
         }
 
 
@@ -79,6 +108,9 @@ class UserResponse(BaseModel):
     role: str
     """User role: 'Engineer' or 'Admin'"""
     
+    is_active: bool
+    """Whether user account is active"""
+    
     created_at: datetime
     """When user was created"""
     
@@ -90,7 +122,41 @@ class UserResponse(BaseModel):
             "email": "engineer@company.com",
             "full_name": "John Engineer",
             "role": "Engineer",
+            "is_active": True,
             "created_at": "2024-01-15T10:30:00"
+        }
+
+
+class UsersListResponse(BaseModel):
+    """Response for listing users"""
+    
+    users: list[UserResponse]
+    """List of users"""
+    
+    total: int
+    """Total count of users"""
+    
+    class Config:
+        example = {
+            "users": [
+                {
+                    "id": 1,
+                    "username": "engineer1",
+                    "email": "engineer@company.com",
+                    "full_name": "John Engineer",
+                    "role": "Engineer",
+                    "created_at": "2024-01-15T10:30:00"
+                },
+                {
+                    "id": 2,
+                    "username": "admin1",
+                    "email": "admin@company.com",
+                    "full_name": "Admin User",
+                    "role": "Admin",
+                    "created_at": "2024-01-14T10:30:00"
+                }
+            ],
+            "total": 2
         }
 
 

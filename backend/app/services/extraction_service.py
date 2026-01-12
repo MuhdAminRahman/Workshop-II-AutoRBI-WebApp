@@ -20,8 +20,6 @@ from PIL import Image
 from app.models.extraction import Extraction, ExtractionStatus
 from app.models.equipment import Equipment
 from app.models.component import Component
-from app.models.work import Work
-from app.models.activity import Activity, EntityType, ActivityAction
 from app.db.database import SessionLocal
 from app.config import settings
 from app.utils.extraction_rules import ExtractionRules
@@ -482,10 +480,6 @@ async def run_extraction(
             try:
                 logger.info(f"  Processing page {page_num + 1}/{len(images)}...")
                 
-                # Update progress BEFORE processing
-                extraction.processed_pages = page_num
-                db.commit()
-                
                 img_bytes = io.BytesIO()
                 image.save(img_bytes, format='PNG')
                 img_bytes.seek(0)
@@ -503,25 +497,17 @@ async def run_extraction(
                     completeness, missing = rules.get_completeness_score(equipment_number, page_data)
                     logger.info(f"  ✅ Page {page_num + 1} extracted (completeness: {completeness:.0f}%)")
                     
-                    # Update progress AFTER successful processing
-                    extraction.processed_pages = page_num + 1
-                    db.commit()
-                    
                     if completeness >= completeness_threshold:
                         logger.info(f"     Completeness {completeness:.0f}% >= threshold, done with Pass 1")
                         break
                     else:
                         logger.info(f"     Completeness {completeness:.0f}% < {completeness_threshold}%, will retry")
-                else:
-                    # Update progress even if no data found
-                    extraction.processed_pages = page_num + 1
-                    db.commit()
+                
+                extraction.processed_pages = page_num + 1
+                db.commit()
             
             except Exception as e:
                 logger.warning(f"  ⚠️  Error on page {page_num + 1}: {str(e)}")
-                # Update progress even on error
-                extraction.processed_pages = page_num + 1
-                db.commit()
                 continue
         
         # Check if we have data
@@ -620,24 +606,6 @@ async def run_extraction(
         extraction.completed_at = datetime.utcnow()
         db.commit()
         
-        # Log completion activity
-        work = db.query(Work).filter(Work.id == work_id).first()
-        if work:
-            activity = Activity(
-                user_id=work.user_id,
-                entity_type=EntityType.EXTRACTION,
-                entity_id=extraction_id,
-                action=ActivityAction.STATUS_CHANGED,
-                data={
-                    "work_id": work_id,
-                    "status": ExtractionStatus.COMPLETED,
-                    "equipment_count": len(extracted_data.get('components', [])),
-                    "completeness": final_completeness
-                }
-            )
-            db.add(activity)
-            db.commit()
-        
         logger.info(f"✅ Extraction {extraction_id} completed successfully!")
     
     except Exception as e:
@@ -648,23 +616,6 @@ async def run_extraction(
             extraction.status = ExtractionStatus.FAILED
             extraction.error_message = error
             db.commit()
-            
-            # Log failure activity
-            work = db.query(Work).filter(Work.id == work_id).first()
-            if work:
-                activity = Activity(
-                    user_id=work.user_id,
-                    entity_type=EntityType.EXTRACTION,
-                    entity_id=extraction_id,
-                    action=ActivityAction.STATUS_CHANGED,
-                    data={
-                        "work_id": work_id,
-                        "status": ExtractionStatus.FAILED,
-                        "error": error
-                    }
-                )
-                db.add(activity)
-                db.commit()
     
     finally:
         db.close()

@@ -170,7 +170,7 @@
     <!-- Filter Section -->
     <div class="filter-section">
         <form method="GET" class="row g-3" id="filterForm">
-            <div class="col-md-4">
+            <div class="col-md-3">
                 <label class="form-label fw-bold">Show activities from last</label>
                 <select name="days" class="form-select" onchange="document.getElementById('filterForm').submit()">
                     <option value="1" {% if days == 1 %}selected{% endif %}>24 Hours</option>
@@ -180,7 +180,7 @@
                     <option value="90" {% if days == 90 %}selected{% endif %}>90 Days</option>
                 </select>
             </div>
-            <div class="col-md-4">
+            <div class="col-md-3">
                 <label class="form-label fw-bold">Filter by Work</label>
                 <select name="work_id" class="form-select" onchange="document.getElementById('filterForm').submit()">
                     <option value="">All Works</option>
@@ -192,12 +192,25 @@
                     {% endfor %}
                 </select>
             </div>
-            <div class="col-md-4 d-flex align-items-end">
-                <button type="submit" class="btn btn-primary w-100">
+            {% if is_admin %}
+            <div class="col-md-3">
+                <label class="form-label fw-bold">Filter by User</label>
+                <select name="username" class="form-select" onchange="document.getElementById('filterForm').submit()">
+                    <option value="">All Users</option>
+                    {% for username in users_list|sort %}
+                    <option value="{{ username }}" {% if filter_username == username %}selected{% endif %}>
+                        {{ username }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% endif %}
+            <div class="col-md-3 d-flex align-items-end gap-2">
+                <button type="submit" class="btn btn-primary flex-grow-1">
                     <i class="bi bi-filter"></i> Apply Filter
                 </button>
-                {% if selected_work_id %}
-                <a href="{{ url_for('works.work_history') }}?days={{ days }}" class="btn btn-outline-secondary ms-2">
+                {% if selected_work_id or filter_username %}
+                <a href="{{ url_for('works.work_history') }}?days={{ days }}" class="btn btn-outline-secondary">
                     <i class="bi bi-x-circle"></i>
                 </a>
                 {% endif %}

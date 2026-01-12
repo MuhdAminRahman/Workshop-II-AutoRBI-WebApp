@@ -81,15 +81,21 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:5173",  # Development frontend
+        "http://localhost:5000",  # Flask development frontend
+        "http://localhost:5173",  # Vite development frontend
         "http://localhost:3000",  # Alternative port
-        "https://autorbi-frontend.onrender.com",  # Production frontend
-        "https://*.onrender.com",  # Any Render domain
+        "http://127.0.0.1:5000",  # Flask localhost alternative
+        "http://127.0.0.1:5173",  # Vite localhost alternative
+        "http://127.0.0.1:3000",  # Alternative port alternative
+        "https://workshop-ii-autorbi-webapp-frontend.onrender.com",  # Production frontend
+        "https://autorbi-frontend.onrender.com",  # Alternative production frontend
+        "https://workshop-ii-autorbi-webapp.onrender.com",  # Same domain (for internal calls)
     ],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+    allow_headers=["Content-Type", "Authorization", "Accept"],
     expose_headers=["Content-Type", "X-RateLimit-Limit", "X-RateLimit-Remaining"],
+    max_age=3600,  # Cache CORS preflight for 1 hour
 )
 
 # 2. Request logging middleware
@@ -199,16 +205,17 @@ async def status_check():
 # ============================================================================
 
 # Routes will be included here:
-from app.api import auth, works, extractions, reports, history, analytics, equipments, users
+from app.api import auth, works, extractions, reports, history, analytics, equipments,users, admin_works
 #
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
-app.include_router(users.router, prefix="/api/users", tags=["users"])
 app.include_router(works.router, prefix="/api/works", tags=["works"])
 app.include_router(extractions.router, prefix="/api", tags=["extractions"])
 app.include_router(reports.router, prefix="/api/reports", tags=["reports"])
 app.include_router(history.router, prefix="/api/history", tags=["history"])
 app.include_router(analytics.router, prefix="/api/analytics", tags=["analytics"])
 app.include_router(equipments.router, prefix="/api/equipments", tags=["equipment"])
+app.include_router(users.router, prefix="/api/users", tags=["users"])
+app.include_router(admin_works.router, prefix="/api/admin", tags=["admin"])
 
 
 # ============================================================================

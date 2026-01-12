@@ -33,5 +33,5 @@ class Activity(BaseModel):
         Index('ix_entity', 'entity_type', 'entity_id'),
     )
     
-    # Relationships
-    user = relationship("User")
+    # ✓ FIXED: Eager load user to avoid N+1 queries
+    user = relationship("User", lazy="joined")

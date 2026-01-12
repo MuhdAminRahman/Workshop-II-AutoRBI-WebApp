@@ -9,6 +9,11 @@
         <h2 class="fw-bold mb-0">
             <i class="bi bi-folder"></i> Works Management
         </h2>
+        {% if is_admin %}
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#assignWorkModal">
+            <i class="bi bi-plus-circle"></i> Create & Assign Work
+        </button>
+        {% endif %}
     </div>
 
     <!-- Works Table -->
@@ -21,6 +26,9 @@
                         <tr>
                             <th>ID</th>
                             <th>Name</th>
+                            {% if is_admin %}
+                            <th>Assigned To</th>
+                            {% endif %}
                             <th>Description</th>
                             <th>Status</th>
                             <th>Created</th>
@@ -32,7 +40,12 @@
                         <tr>
                             <td><strong>#{{ work.id }}</strong></td>
                             <td><strong>{{ work.name }}</strong></td>
-                            <td>{{ work.description[:50] }}{% if work.description|length > 50 %}...{% endif %}</td>
+                            {% if is_admin %}
+                            <td id="assigned-{{ work.id }}">
+                                <small class="text-muted"><i class="bi bi-hourglass-split"></i> Loading...</small>
+                            </td>
+                            {% endif %}
+                            <td style="max-width: 300px; word-wrap: break-word; white-space: normal;">{{ work.description }}</td>
                             <td>
                                 <span class="badge bg-{{ get_status_badge_class(work.status) }}">
                                     {{ work.status|capitalize }}
@@ -41,10 +54,23 @@
                             <td>{{ work.created_at|datetime }}</td>
                             <td>
                                 <div class="btn-group" role="group">
+                                    {% if is_admin %}
+                                    <a href="{{ url_for('works.view_team', work_id=work.id) }}" 
+                                       class="btn btn-sm btn-outline-primary" title="View Team">
+                                        <i class="bi bi-people"></i>
+                                    </a>
+                                    {% else %}
+                                    {% if work.status == 'completed' %}
+                                    <button class="btn btn-sm btn-outline-secondary" disabled title="Work is completed">
+                                        <i class="bi bi-upload"></i>
+                                    </button>
+                                    {% else %}
                                     <a href="{{ url_for('works.view_work', work_id=work.id) }}" 
                                        class="btn btn-sm btn-outline-primary" title="View Details">
-                                        <i class="bi bi-eye"></i>
+                                        <i class="bi bi-upload"></i>
                                     </a>
+                                    {% endif %}
+                                    {% endif %}
                                     <a href="{{ url_for('reports.view_reports', work_id=work.id) }}" 
                                        class="btn btn-sm btn-outline-success" title="Reports">
                                         <i class="bi bi-file-earmark-text"></i>
@@ -53,11 +79,20 @@
                                        class="btn btn-sm btn-outline-info" title="Analytics">
                                         <i class="bi bi-graph-up"></i>
                                     </a>
+                                    {% if is_admin and work.status != 'completed' %}
+                                    <button class="btn btn-sm btn-outline-success" 
+                                            onclick="completeWork({{ work.id }}, '{{ work.name }}')"
+                                            title="Mark as Completed">
+                                        <i class="bi bi-check-lg"></i>
+                                    </button>
+                                    {% endif %}
+                                    {% if is_admin %}
                                     <button class="btn btn-sm btn-outline-danger" 
                                             onclick="deleteWork({{ work.id }}, '{{ work.name }}')" 
                                             title="Delete">
                                         <i class="bi bi-trash"></i>
                                     </button>
+                                    {% endif %}
                                 </div>
                             </td>
                         </tr>
@@ -68,24 +103,26 @@
             {% else %}
             <div class="text-center py-5">
                 <i class="bi bi-inbox text-muted" style="font-size: 4rem;"></i>
-                <p class="text-muted mt-3 mb-4">No works found. Create your first work project!</p>
-                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createWorkModal">
-                    <i class="bi bi-plus-circle"></i> Create Work
-                </button>
+                {% if is_admin %}
+                <p class="text-muted mt-3 mb-4">No works created yet. Create and assign work to engineers!</p>
+                {% else %}
+                <p class="text-muted mt-3 mb-4">No works assigned to you yet. Contact your administrator.</p>
+                {% endif %}
             </div>
             {% endif %}
         </div>
     </div>
 </div>
 
-<!-- Create Work Modal -->
-<div class="modal fade" id="createWorkModal" tabindex="-1">
+<!-- Admin: Create & Assign Work Modal -->
+{% if is_admin %}
+<div class="modal fade" id="assignWorkModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
-            <form method="POST" action="{{ url_for('works.create_work') }}">
+            <form method="POST" action="{{ url_for('works.assign_work') }}" id="assignWorkForm">
                 <div class="modal-header">
                     <h5 class="modal-title">
-                        <i class="bi bi-plus-circle"></i> Create New Work
+                        <i class="bi bi-plus-circle"></i> Create & Assign Work
                     </h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
@@ -93,24 +130,55 @@
                     <div class="mb-3">
                         <label for="name" class="form-label">Work Name <span class="text-danger">*</span></label>
                         <input type="text" class="form-control" id="name" name="name" required 
-                               placeholder="e.g., Pipeline Inspection 2026">
+                               placeholder="e.g., Pipeline Inspection 2026" minlength="3">
+                        <div class="invalid-feedback">
+                            Please provide a work name (minimum 3 characters).
+                        </div>
                     </div>
                     <div class="mb-3">
                         <label for="description" class="form-label">Description</label>
                         <textarea class="form-control" id="description" name="description" rows="3"
                                   placeholder="Brief description of the work project"></textarea>
                     </div>
+                    <div class="mb-3">
+                        <label class="form-label">Assign To Engineers <span class="text-danger">*</span></label>
+                        
+                        <!-- Search input -->
+                        <div class="input-group mb-2">
+                            <span class="input-group-text"><i class="bi bi-search"></i></span>
+                            <input type="text" class="form-control" id="engineerSearch" 
+                                   placeholder="Search engineers by name or email...">
+                        </div>
+                        
+                        <!-- Engineers list with checkboxes -->
+                        <div id="engineersContainer" class="border rounded p-3" style="max-height: 250px; overflow-y: auto;">
+                            <div class="text-center text-muted py-3">
+                                <div class="spinner-border spinner-border-sm" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                                <div class="mt-2">Loading engineers...</div>
+                            </div>
+                        </div>
+                        
+                        <div id="engineerSelectionError" class="text-danger small mt-1" style="display: none;">
+                            Please select at least one engineer to assign this work.
+                        </div>
+                        <div class="form-text">
+                            <span id="selectedCount">0</span> engineer(s) selected
+                        </div>
+                    </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary">
-                        <i class="bi bi-check-circle"></i> Create Work
+                    <button type="submit" class="btn btn-primary" id="assignWorkSubmitBtn">
+                        <i class="bi bi-check-circle"></i> Create & Assign
                     </button>
                 </div>
             </form>
         </div>
     </div>
 </div>
+{% endif %}
 
 <!-- Delete Confirmation Modal -->
 <div class="modal fade" id="deleteWorkModal" tabindex="-1">
@@ -150,5 +218,231 @@ function deleteWork(workId, workName) {
     document.getElementById('deleteWorkForm').action = `/works/${workId}/delete`;
     modal.show();
 }
+
+async function completeWork(workId, workName) {
+    if (!confirm(`Mark "${workName}" as completed?`)) {
+        return;
+    }
+    
+    try {
+        // Use frontend endpoint instead of backend directly (avoid CORS)
+        const response = await fetch(`/works/api/status/${workId}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                status: 'completed'
+            })
+        });
+        
+        if (response.ok) {
+            console.log(`✅ Work ${workId} marked as completed`);
+            // Reload the page to show updated status
+            location.reload();
+        } else {
+            const errorData = await response.json();
+            alert(`Failed to complete work: ${errorData.detail || 'Unknown error'}`);
+        }
+    } catch (error) {
+        console.error('Error completing work:', error);
+        alert('Failed to complete work. Please check your connection and try again.');
+    }
+}
+
+{% if is_admin %}
+let engineersData = [];
+let selectedEngineers = new Set(); // Track selected engineer IDs
+
+// Load collaborators for each work
+async function loadAssignedEngineers() {
+    const workIds = document.querySelectorAll('[id^="assigned-"]');
+    
+    for (const element of workIds) {
+        const workId = element.id.replace('assigned-', '');
+        try {
+            console.log(`🔄 Fetching collaborators for work ${workId}...`);
+            // Use frontend endpoint instead of backend directly (avoid CORS)
+            const response = await fetch(`/works/api/collaborators/${workId}`);
+            
+            console.log(`📍 Response status for work ${workId}: ${response.status}`);
+            
+            if (response.ok) {
+                const data = await response.json();
+                console.log(`✅ Collaborators for work ${workId}:`, data);
+                const collaborators = data.collaborators || [];
+                
+                // Filter to show only editors (engineers) and owner
+                const engineers = collaborators.filter(c => c.role === 'editor' || c.role === 'owner');
+                
+                if (engineers.length > 0) {
+                    const html = engineers.map(eng => {
+                        const roleClass = eng.role === 'owner' ? 'danger' : 'info';
+                        return `<span class="badge bg-${roleClass} me-1 mb-1" title="${eng.email}">${eng.full_name || eng.email}</span>`;
+                    }).join('');
+                    element.innerHTML = html;
+                    console.log(`✅ Displayed ${engineers.length} engineers for work ${workId}`);
+                } else {
+                    element.innerHTML = '<small class="text-muted">No engineers assigned</small>';
+                    console.log(`⚠️ No engineers found for work ${workId}`);
+                }
+            } else {
+                const errorText = await response.text();
+                console.error(`❌ API error for work ${workId}: ${response.status}`, errorText);
+                element.innerHTML = '<small class="text-muted">No engineers assigned</small>';
+            }
+        } catch (error) {
+            console.error(`❌ Error loading collaborators for work ${workId}:`, error);
+            element.innerHTML = '<small class="text-muted">No engineers assigned</small>';
+        }
+    }
+}
+
+// Load engineers when page loads
+document.addEventListener('DOMContentLoaded', loadAssignedEngineers);
+
+// Load engineers when assign modal opens
+document.getElementById('assignWorkModal')?.addEventListener('show.bs.modal', async function() {
+    const container = document.getElementById('engineersContainer');
+    const submitBtn = document.getElementById('assignWorkSubmitBtn');
+    const form = document.getElementById('assignWorkForm');
+    const searchInput = document.getElementById('engineerSearch');
+    
+    // Reset form and selections
+    form?.reset();
+    searchInput.value = '';
+    selectedEngineers.clear();
+    document.getElementById('selectedCount').textContent = '0';
+    submitBtn.disabled = true;
+    
+    container.innerHTML = `
+        <div class="text-center text-muted py-3">
+            <div class="spinner-border spinner-border-sm" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <div class="mt-2">Loading engineers...</div>
+        </div>
+    `;
+    
+    try {
+        const response = await fetch('/works/api/engineers');
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        engineersData = data.users || [];
+        
+        if (engineersData.length > 0) {
+            renderEngineers(engineersData);
+            submitBtn.disabled = false;
+        } else {
+            container.innerHTML = '<div class="text-center text-muted py-3">No engineers available</div>';
+            submitBtn.disabled = true;
+            alert('No engineers found. Please create engineer accounts first.');
+        }
+    } catch (error) {
+        console.error('Error loading engineers:', error);
+        container.innerHTML = '<div class="text-center text-danger py-3"><i class="bi bi-exclamation-triangle"></i> Error loading engineers</div>';
+        submitBtn.disabled = true;
+        alert('Failed to load engineers. Please check your connection and try again.');
+    }
+});
+
+// Render engineers list with checkboxes
+function renderEngineers(engineers, searchTerm = '') {
+    const container = document.getElementById('engineersContainer');
+    
+    // Filter engineers based on search
+    const filtered = engineers.filter(user => {
+        if (!searchTerm) return true;
+        const search = searchTerm.toLowerCase();
+        return user.username.toLowerCase().includes(search) || 
+               user.email.toLowerCase().includes(search);
+    });
+    
+    if (filtered.length === 0) {
+        container.innerHTML = '<div class="text-center text-muted py-3">No engineers match your search</div>';
+        return;
+    }
+    
+    // Render with preserved checked state
+    container.innerHTML = filtered.map(user => {
+        const isChecked = selectedEngineers.has(user.id);
+        return `
+            <div class="form-check mb-2">
+                <input class="form-check-input engineer-checkbox" type="checkbox" 
+                       name="user_id" value="${user.id}" id="engineer_${user.id}"
+                       ${isChecked ? 'checked' : ''}
+                       onchange="updateEngineerSelection(${user.id}, this.checked)">
+                <label class="form-check-label" for="engineer_${user.id}">
+                    <strong>${user.username}</strong>
+                    <br><small class="text-muted">${user.email}</small>
+                </label>
+            </div>
+        `;
+    }).join('');
+}
+
+// Search functionality
+document.getElementById('engineerSearch')?.addEventListener('input', function(e) {
+    renderEngineers(engineersData, e.target.value);
+});
+
+// Update selection tracking
+function updateEngineerSelection(engineerId, isChecked) {
+    if (isChecked) {
+        selectedEngineers.add(engineerId);
+    } else {
+        selectedEngineers.delete(engineerId);
+    }
+    updateEngineerCount();
+}
+
+// Update selected count
+function updateEngineerCount() {
+    const count = selectedEngineers.size;
+    document.getElementById('selectedCount').textContent = count;
+    
+    // Enable/disable submit based on selection
+    const submitBtn = document.getElementById('assignWorkSubmitBtn');
+    if (count > 0) {
+        submitBtn.disabled = false;
+        document.getElementById('engineerSelectionError').style.display = 'none';
+    } else {
+        submitBtn.disabled = true;
+    }
+}
+
+// Validate selection before submit
+document.getElementById('assignWorkForm')?.addEventListener('submit', function(e) {
+    if (selectedEngineers.size === 0) {
+        e.preventDefault();
+        document.getElementById('engineerSelectionError').style.display = 'block';
+        alert('Please select at least one engineer');
+        return false;
+    }
+    
+    // Create hidden inputs for all selected engineers
+    const container = document.getElementById('engineersContainer');
+    container.innerHTML = '';
+    
+    // Add hidden inputs for form submission
+    const form = document.getElementById('assignWorkForm');
+    const existingInputs = form.querySelectorAll('input[name="user_id"]');
+    existingInputs.forEach(input => input.remove());
+    
+    selectedEngineers.forEach(engineerId => {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'user_id';
+        input.value = engineerId;
+        form.appendChild(input);
+    });
+    
+    console.log('🔍 Submitting with selected engineers:', Array.from(selectedEngineers));
+});
+{% endif %}
 </script>
 {% endblock %}

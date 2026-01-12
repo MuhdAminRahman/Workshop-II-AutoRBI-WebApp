@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.models.user import User, UserRole
-from app.schemas.user import UserLoginRequest, UserRegisterRequest
+from app.schemas.user import UserLoginRequest, UserRegisterRequest, validate_password_strength
 
 logger = logging.getLogger(__name__)
 
@@ -134,7 +134,7 @@ def decode_access_token(token: str) -> Optional[int]:
         if user_id is None:
             return None
         
-        return user_id
+        return int(user_id)
     
     except JWTError as e:
         logger.warning(f"Invalid token: {str(e)}")
@@ -163,6 +163,7 @@ def register_user(
         email: User email
         password: Plain text password
         full_name: User's full name
+        role: User role (Engineer, Admin)
     
     Returns:
         (User object, error message)
@@ -175,11 +176,18 @@ def register_user(
             username="john",
             email="john@example.com",
             password="SecurePass123",
-            full_name="John Doe"
+            full_name="John Doe",
+            role="Engineer"
         )
         if error:
             print(f"Registration failed: {error}")
     """
+    # ✓ FIXED: Validate password strength
+    is_strong, message = validate_password_strength(password)
+    if not is_strong:
+        logger.warning(f"Registration attempt with weak password: {message}")
+        return None, message
+    
     # Check if username already exists
     existing_user = db.query(User).filter(User.username == username).first()
     if existing_user:
@@ -199,7 +207,7 @@ def register_user(
         email=email,
         password_hash=hashed_password,
         full_name=full_name,
-        role=role,  # Default role
+        role=role,
     )
     
     try:
@@ -207,7 +215,7 @@ def register_user(
         db.commit()
         db.refresh(new_user)
         
-        logger.info(f"✅ User registered: {username}")
+        logger.info(f"[OK] User registered: {username}")
         return new_user, None
     
     except Exception as e:
@@ -250,15 +258,20 @@ def authenticate_user(
     user = db.query(User).filter(User.username == username).first()
     
     if not user:
-        logger.warning(f"❌ Login failed: User '{username}' not found")
+        logger.warning(f"[BLOCKED] Login failed: User '{username}' not found")
         return None, "Invalid username or password"
+    
+    # Check if user is active
+    if not user.is_active:
+        logger.warning(f"[BLOCKED] Login attempt for inactive user: {username}")
+        return None, "Account is inactive. Contact administrator."
     
     # Verify password
     if not verify_password(password, user.password_hash):
-        logger.warning(f"❌ Login failed: Wrong password for user '{username}'")
+        logger.warning(f"[BLOCKED] Login failed: Wrong password for user '{username}'")
         return None, "Invalid username or password"
     
-    logger.info(f"✅ User logged in: {username}")
+    logger.info(f"[OK] User logged in: {username}")
     return user, None
 
 
@@ -303,19 +316,21 @@ FLOW DIAGRAM:
 REGISTRATION:
 1. User provides: username, email, password, full_name
 2. register_user() is called
-3. Check if username/email exists
-4. Hash password with bcrypt
-5. Create user in database
-6. Return user object
+3. ✓ Validate password strength
+4. Check if username/email exists
+5. Hash password with bcrypt
+6. Create user in database
+7. Return user object
 
 LOGIN:
 1. User provides: username, password
 2. authenticate_user() is called
 3. Find user by username
-4. Verify password with bcrypt
-5. Return user object
-6. generate token: create_access_token(user.id)
-7. Return token to client
+4. Check if user is active
+5. Verify password with bcrypt
+6. Return user object
+7. generate token: create_access_token(user.id)
+8. Return token to client
 
 SUBSEQUENT REQUESTS:
 1. Client sends token in Authorization header

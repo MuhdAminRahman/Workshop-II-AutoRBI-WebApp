@@ -52,14 +52,11 @@
                             <div class="col-md-6 mb-3">
                                 <label class="form-label">Role <span class="text-danger">*</span></label>
                                 <select name="role" class="form-select" required>
-                                    <option value="engineer" {{ 'selected' if user and user.role == 'Engineer' else '' }}>
+                                    <option value="engineer" {{ 'selected' if user and user.role|lower == 'engineer' else '' }}>
                                         Engineer
                                     </option>
-                                    <option value="admin" {{ 'selected' if user and user.role == 'Admin' else '' }}>
+                                    <option value="admin" {{ 'selected' if user and user.role|lower == 'admin' else '' }}>
                                         Admin
-                                    </option>
-                                    <option value="viewer" {{ 'selected' if user and user.role == 'Viewer' else '' }}>
-                                        Viewer
                                     </option>
                                 </select>
                             </div>
@@ -68,21 +65,18 @@
                                 <label class="form-label">Status</label>
                                 <div class="form-check form-switch mt-2">
                                     <input type="checkbox" name="is_active" class="form-check-input" 
-                                           id="isActive" {{ 'checked' if user and user.is_active else '' }}>
+                                           id="isActive" {% if user and user.is_active %}checked{% endif %}>
                                     <label class="form-check-label" for="isActive">Active</label>
                                 </div>
+                                <small class="d-block mt-2 text-muted" id="statusDisplay">
+                                    {% if user and user.is_active %}
+                                    Status: <span class="badge bg-success">Active</span>
+                                    {% else %}
+                                    Status: <span class="badge bg-danger">Inactive</span>
+                                    {% endif %}
+                                </small>
                             </div>
                             {% endif %}
-                        </div>
-
-                        <div class="alert alert-info">
-                            <i class="bi bi-info-circle"></i>
-                            <strong>Role Permissions:</strong>
-                            <ul class="mb-0 mt-2">
-                                <li><strong>Admin:</strong> Full system access, manage users and all works</li>
-                                <li><strong>Engineer:</strong> Create and manage own works, generate reports</li>
-                                <li><strong>Viewer:</strong> Read-only access to assigned works</li>
-                            </ul>
                         </div>
 
                         <div class="d-flex justify-content-between">
@@ -99,4 +93,18 @@
         </div>
     </div>
 </div>
+
+<script>
+// Update status display when checkbox changes
+if (document.getElementById('isActive')) {
+    document.getElementById('isActive').addEventListener('change', function() {
+        const statusDisplay = document.getElementById('statusDisplay');
+        if (this.checked) {
+            statusDisplay.innerHTML = 'Status: <span class="badge bg-success">Active</span>';
+        } else {
+            statusDisplay.innerHTML = 'Status: <span class="badge bg-danger">Inactive</span>';
+        }
+    });
+}
+</script>
 {% endblock %}

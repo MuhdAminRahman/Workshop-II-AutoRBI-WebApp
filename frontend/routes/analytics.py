@@ -15,95 +15,45 @@ def index():
     """Analytics overview page"""
     token = get_auth_token()
     api = BackendAPI(token)
-    current_user = session.get('user', {})
-    user_id = current_user.get('id')
-    is_admin = current_user.get('role') == 'Admin'
     
-    # Get all works
-    response = api.get_works()
-    all_works = response.get('works', []) if 'works' in response else response if isinstance(response, list) else []
+    # Get works assigned to user
+    works_response = api.get_works(skip=0, limit=100)
+    works = works_response.get('works', []) if isinstance(works_response, dict) else []
     
-    # Filter works by user if not admin
-    if not is_admin:
-        works = [w for w in all_works if w.get('user_id') == user_id]
-    else:
-        works = all_works
+    # Initialize counters
+    total_works = len(works)
+    total_extractions = 0
+    total_equipment = 0
+    total_components = 0
     
-    # Get analytics metrics with appropriate grouping
-    if is_admin:
-        # Admins see all data
-        extraction_stats = api.get_extraction_analytics(period='all_time')
-        works_status = api.get_works_status(period='all_time')
-        equipment_count = api.get_equipment_count(period='all_time')
-        components_count = api.get_components_count(period='all_time')
-    else:
-        # Engineers: request grouped data and filter by their work IDs
-        user_work_ids = set([w['id'] for w in works])
-        
-        # If user has no works, return zero counts
-        if not user_work_ids:
-            extraction_stats = {'data': [{'count': 0}], 'total': 0}
-            works_status = {'data': [], 'total': 0}
-            equipment_count = {'data': [{'count': 0}], 'total': 0}
-            components_count = {'data': [{'count': 0}], 'total': 0}
-        else:
-            # Request grouped data from backend
-            extraction_stats = api.get_extraction_analytics(period='all_time', group_by='work_id')
-            works_status = api.get_works_status(period='all_time', group_by='user_id')
-            equipment_count = api.get_equipment_count(period='all_time')  # Already grouped by work_id
-            components_count = api.get_components_count(period='all_time')
-            
-            # Filter extraction stats by user's work IDs
-            total_extractions = 0
-            if 'data' in extraction_stats and isinstance(extraction_stats['data'], list):
-                for item in extraction_stats['data']:
-                    if item.get('work_id') in user_work_ids:
-                        total_extractions += item.get('count', 0)
-            
-            extraction_stats = {
-                'data': [{'count': total_extractions}],
-                'total': total_extractions,
-                'metric': 'extraction_status',
-                'period': 'all_time'
-            }
-            
-            # Filter works status (count from filtered works list)
-            status_counts = {}
-            for work in works:
-                status = work.get('status', 'unknown')
-                status_counts[status] = status_counts.get(status, 0) + 1
-            
-            works_status = {
-                'data': [{'status': k, 'count': v} for k, v in status_counts.items()],
-                'total': len(works)
-            }
-            
-            # Filter equipment by user's work IDs
-            total_equipment = 0
-            if 'data' in equipment_count and isinstance(equipment_count['data'], list):
-                for item in equipment_count['data']:
-                    if item.get('work_id') in user_work_ids:
-                        total_equipment += item.get('count', 0)
-            
-            equipment_count = {'data': [{'count': total_equipment}], 'total': total_equipment}
-            
-            # Count components from user's works only
-            total_components = 0
-            for work_id in user_work_ids:
+    # For each work, calculate metrics
+    for work in works:
+        work_id = work.get('id')
+        if work_id:
+            try:
                 work_detail = api.get_work(work_id)
-                if isinstance(work_detail, dict):
-                    equipment_list = work_detail.get('equipment', [])
-                    for eq in (equipment_list if isinstance(equipment_list, list) else []):
-                        components = eq.get('components', [])
-                        total_components += len(components) if isinstance(components, list) else 0
-            
-            components_count = {'data': [{'count': total_components}], 'total': total_components}
+                equipment_list = work_detail.get('equipment', [])
+                
+                for equipment in equipment_list:
+                    total_equipment += 1
+                    # Count extractions (equipment with components = extracted)
+                    components = equipment.get('components', [])
+                    if components:
+                        total_extractions += 1
+                    total_components += len(components) if isinstance(components, list) else 0
+            except:
+                continue
+    
+    # Prepare stats for template
+    extraction_stats = {'total': total_extractions}
+    equipment_count = {'total': total_equipment}
+    components_count = {'total': total_components}
     
     return render_template(
         'analytics/index.html', 
         works=works,
+        total_works=total_works,
         extraction_stats=extraction_stats,
-        works_status=works_status,
         equipment_count=equipment_count,
         components_count=components_count
     )
@@ -127,12 +77,19 @@ def view_analytics(work_id):
     
     # Calculate simple stats from work data
     total_equipment = len(equipment)
-    completed_equipment = sum(1 for eq in equipment if eq.get('status') == 'completed')
+    
+    # If work status is completed, mark all equipment as completed
+    if work.get('status') == 'completed':
+        completed_equipment = total_equipment
+        completion_rate = 100.0 if total_equipment > 0 else 0
+    else:
+        completed_equipment = sum(1 for eq in equipment if eq.get('status') == 'completed')
+        completion_rate = round((completed_equipment / total_equipment * 100) if total_equipment > 0 else 0, 1)
     
     analytics = {
         'total_equipment': total_equipment,
         'completed_equipment': completed_equipment,
-        'completion_rate': round((completed_equipment / total_equipment * 100) if total_equipment > 0 else 0, 1),
+        'completion_rate': completion_rate,
         'equipment': equipment
     }
     

@@ -60,7 +60,7 @@
                     <div class="d-flex justify-content-between align-items-center">
                         <div>
                             <p class="text-muted mb-1">Administrators</p>
-                            <h3 class="mb-0">{{ users|selectattr('role', 'equalto', 'admin')|list|length }}</h3>
+                            <h3 class="mb-0">{{ users|selectattr('role', 'equalto', 'Admin')|list|length }}</h3>
                         </div>
                         <div class="bg-warning bg-opacity-10 p-3 rounded">
                             <i class="bi bi-shield-check fs-2 text-warning"></i>
@@ -75,7 +75,7 @@
                     <div class="d-flex justify-content-between align-items-center">
                         <div>
                             <p class="text-muted mb-1">Engineers</p>
-                            <h3 class="mb-0">{{ users|selectattr('role', 'equalto', 'engineer')|list|length }}</h3>
+                            <h3 class="mb-0">{{ users|selectattr('role', 'equalto', 'Engineer')|list|length }}</h3>
                         </div>
                         <div class="bg-info bg-opacity-10 p-3 rounded">
                             <i class="bi bi-gear fs-2 text-info"></i>
@@ -159,7 +159,7 @@
                                         <i class="bi bi-eye"></i>
                                     </a>
                                     <a href="{{ url_for('admin.edit_user', user_id=user.id) }}" 
-                                       class="btn btn-outline-secondary" title="Edit">
+                                       class="btn btn-outline-success" title="Edit">
                                         <i class="bi bi-pencil"></i>
                                     </a>
                                     <button type="button" 

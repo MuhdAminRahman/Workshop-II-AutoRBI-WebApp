@@ -4,53 +4,22 @@
 
 {% block content %}
 <div class="analytics-view">
-    <!-- Breadcrumb -->
-    <nav aria-label="breadcrumb" class="mb-3">
-        <ol class="breadcrumb">
-            <li class="breadcrumb-item"><a href="{{ url_for('analytics.index') }}">Analytics</a></li>
-            <li class="breadcrumb-item active">{{ work.name }}</li>
-        </ol>
-    </nav>
-
     <!-- Page Header -->
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2 class="fw-bold mb-0">
             <i class="bi bi-graph-up"></i> {{ work.name }} Analytics
         </h2>
-        <a href="{{ url_for('reports.view_reports', work_id=work.id) }}" class="btn btn-outline-success">
-            <i class="bi bi-file-earmark-text"></i> View Reports
-        </a>
+        <div class="gap-2 d-flex">
+            <a href="{{ url_for('analytics.index') }}" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left"></i> Back to Analytics Dashboard
+            </a>
+            <a href="{{ url_for('reports.view_reports', work_id=work.id) }}" class="btn btn-outline-success">
+                <i class="bi bi-file-earmark-text"></i> View Reports
+            </a>
+        </div>
     </div>
 
     {% if analytics %}
-    <!-- Stats Cards -->
-    <div class="row g-4 mb-4">
-        <div class="col-md-4">
-            <div class="card border-0 shadow-sm">
-                <div class="card-body text-center">
-                    <h6 class="text-muted mb-2">Total Equipment</h6>
-                    <h2 class="mb-0 text-primary">{{ analytics.total_equipment }}</h2>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-4">
-            <div class="card border-0 shadow-sm">
-                <div class="card-body text-center">
-                    <h6 class="text-muted mb-2">Completed</h6>
-                    <h2 class="mb-0 text-success">{{ analytics.completed_equipment }}</h2>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-4">
-            <div class="card border-0 shadow-sm">
-                <div class="card-body text-center">
-                    <h6 class="text-muted mb-2">Completion Rate</h6>
-                    <h2 class="mb-0 text-info">{{ analytics.completion_rate }}%</h2>
-                </div>
-            </div>
-        </div>
-    </div>
-
     <!-- Equipment List -->
     <div class="card border-0 shadow-sm">
         <div class="card-header bg-primary text-white py-3">

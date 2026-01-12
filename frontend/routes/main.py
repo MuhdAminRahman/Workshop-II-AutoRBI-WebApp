@@ -27,104 +27,90 @@ def index():
 @login_required
 def dashboard():
     """Main dashboard - different view for admin and users"""
-    token = get_auth_token()
-    api = BackendAPI(token)
+    from datetime import datetime
+    
     user_role = session.get('user', {}).get('role', 'Engineer')
     
-    # Get works
+    # Redirect admins to admin panel
+    if user_role == 'Admin':
+        return redirect(url_for('admin.admin_dashboard'))
+    
+    token = get_auth_token()
+    api = BackendAPI(token)
+    
+    # Get works assigned to the engineer (backend filters by collaborators)
     works_response = api.get_works(skip=0, limit=100)
     works = works_response.get('works', []) if isinstance(works_response, dict) else []
     
-    if user_role == 'Admin':
-        # Admin: Show system-wide statistics
-        total_works = len(works)
-        completed_works = sum(1 for w in works if w.get('status') == 'completed')
-        in_progress_works = sum(1 for w in works if w.get('status') == 'in_progress')
-        active_users = len(set(w.get('owner_id') for w in works if w.get('owner_id')))
-        
-        # Check for uploaded templates
-        excel_template = None
-        ppt_template = None
-        if os.path.exists(os.path.join(TEMPLATES_DIR, 'master_template.xlsx')):
-            excel_template = {'filename': 'master_template.xlsx'}
-        if os.path.exists(os.path.join(TEMPLATES_DIR, 'master_template.pptx')):
-            ppt_template = {'filename': 'master_template.pptx'}
-        
-        return render_template(
-            'dashboard/admin.html',
-            works=works,
-            total_works=total_works,
-            completed_works=completed_works,
-            in_progress_works=in_progress_works,
-            active_users=active_users,
-            excel_template=excel_template,
-            ppt_template=ppt_template,
-            get_status_badge_class=get_status_badge_class
-        )
-    else:
-        # Engineer: Show their own works analysis
-        current_user_id = session.get('user', {}).get('id')
-        
-        # Filter works by current user
-        user_works = [w for w in works if w.get('user_id') == current_user_id]
-        
-        total_works = len(user_works)
-        active_works = sum(1 for w in user_works if w.get('status') == 'active')
-        completed_works = sum(1 for w in user_works if w.get('status') == 'completed')
-        
-        # Get total equipment from user's works only
-        total_equipment = 0
-        total_components = 0
-        total_fields = 0
-        filled_fields = 0
-        
-        # Required fields for health score calculation
-        required_fields = ['fluid', 'material_spec', 'material_grade', 'insulation', 
-                         'design_temp', 'design_pressure', 'operating_temp', 'operating_pressure']
-        
-        try:
-            # Get equipment and components from each user work
-            for work in user_works:
-                work_id = work.get('id')
-                if work_id:
-                    try:
-                        work_detail = api.get_work(work_id)
-                        equipment_list = work_detail.get('equipment', [])
-                        
-                        for equipment in equipment_list:
-                            total_equipment += 1
-                            components = equipment.get('components', [])
-                            
-                            for component in components:
-                                total_components += 1
-                                total_fields += len(required_fields)
-                                
-                                # Count filled fields
-                                for field in required_fields:
-                                    value = component.get(field)
-                                    if value and str(value).strip() and str(value).strip().lower() not in ['none', 'n/a', '']:
-                                        filled_fields += 1
-                    except:
-                        continue
-        except:
-            pass
-        
-        # Calculate average health score
-        if total_fields > 0:
-            avg_health_score = round((filled_fields / total_fields) * 100)
-        else:
-            avg_health_score = 0  # No data = 0%
-        
-        return render_template(
-            'dashboard/index.html',
-            works=user_works[:5],  # Show only 5 most recent
-            total_works=total_works,
-            active_works=active_works,
-            completed_works=completed_works,
-            total_equipment=total_equipment,
-            avg_health_score=avg_health_score,
-            get_status_badge_class=get_status_badge_class
-        )
+    # Engineer dashboard - works already filtered by backend to only show their assigned works
+    total_works = len(works)
+    active_works = sum(1 for w in works if w.get('status') == 'active')
+    completed_works = sum(1 for w in works if w.get('status') == 'completed')
+    
+    # Get total equipment from all works and calculate health score
+    total_equipment = 0
+    total_extracted_equipment = 0
+    
+    # Critical fields for RBI data readiness
+    critical_fields = ['fluid', 'material_spec', 'design_temp', 'design_pressure']
+    
+    all_components = []
+    
+    try:
+        # Get equipment and components from each work
+        for work in works:
+            work_id = work.get('id')
+            if work_id:
+                try:
+                    work_detail = api.get_work(work_id)
+                    equipment_list = work_detail.get('equipment', [])
+                    
+                    # Add equipment count to work object for display
+                    work['equipment_count'] = len(equipment_list)
+                    
+                    for equipment in equipment_list:
+                        total_equipment += 1
+                        # Check if equipment has been extracted (has components)
+                        components = equipment.get('components', [])
+                        if components:
+                            total_extracted_equipment += 1
+                            all_components.extend(components)
+                except:
+                    work['equipment_count'] = 0
+                    continue
+    except:
+        pass
+    
+    # Calculate health score based on extraction rate and completeness
+    extraction_rate = (total_extracted_equipment / total_equipment * 100) if total_equipment > 0 else 0
+    
+    # Calculate completeness rate for critical fields
+    filled_critical = 0
+    if all_components:
+        for component in all_components:
+            for field in critical_fields:
+                value = component.get(field)
+                if value and str(value).strip() and str(value).strip().lower() not in ['none', 'n/a', '']:
+                    filled_critical += 1
+    
+    total_critical_fields = len(all_components) * len(critical_fields)
+    completeness_rate = (filled_critical / total_critical_fields * 100) if total_critical_fields > 0 else 0
+    
+    # Health score: 40% extraction + 40% completeness + 20% quality (assume high quality)
+    # Quality score set to 20 (full marks, no corrections assumed)
+    avg_health_score = round((extraction_rate * 0.4) + (completeness_rate * 0.4) + 20, 1)
+    
+    return render_template(
+        'dashboard/index.html',
+        works=works[:5] if works else [],  # Show only 5 most recent
+        total_works=total_works,
+        active_works=active_works,
+        completed_works=completed_works,
+        total_equipment=total_equipment,
+        avg_health_score=avg_health_score,
+        now=datetime.now(),
+        get_status_badge_class=get_status_badge_class
+    )
 
 @main_bp.route('/admin/upload-template', methods=['POST'])
 @login_required

@@ -7,6 +7,7 @@ from enum import Enum
 from pydantic import BaseModel
 from app.models.activity import Activity, EntityType, ActivityAction
 from app.models.work import Work
+from app.models.work_collaborator import WorkCollaborator
 from app.models.extraction import Extraction
 from app.models.file import File
 from app.models.equipment import Equipment
@@ -57,13 +58,18 @@ async def extraction_status(
     cutoff_date = _get_cutoff_date(period)
     
     if group_by == "user_id":
+        # ✓ FIXED: Correct join syntax
         result = db.query(
-            Work.user_id,
+            WorkCollaborator.user_id,
             Extraction.status,
             func.count(Extraction.id).label("count")
-        ).join(Work).filter(
+        ).join(
+            Work, WorkCollaborator.work_id == Work.id
+        ).join(
+            Extraction, Work.id == Extraction.work_id
+        ).filter(
             Extraction.created_at >= cutoff_date
-        ).group_by(Work.user_id, Extraction.status).all()
+        ).group_by(WorkCollaborator.user_id, Extraction.status).all()
         
         data = [
             {"user_id": r.user_id, "status": r.status, "count": r.count}
@@ -119,18 +125,22 @@ async def work_status(
     
     group_by options:
     - None: overall stats
-    - "user_id": breakdown by user
+    - "user_id": breakdown by user (owner)
     """
     cutoff_date = _get_cutoff_date(period)
     
     if group_by == "user_id":
+        # ✓ FIXED: Correct join - get owner via WorkCollaborator
         result = db.query(
-            Work.user_id,
+            WorkCollaborator.user_id,
             Work.status,
             func.count(Work.id).label("count")
+        ).join(
+            Work, WorkCollaborator.work_id == Work.id
         ).filter(
-            Work.created_at >= cutoff_date
-        ).group_by(Work.user_id, Work.status).all()
+            Work.created_at >= cutoff_date,
+            WorkCollaborator.role == "owner"  # Only count owners
+        ).group_by(WorkCollaborator.user_id, Work.status).all()
         
         data = [
             {"user_id": r.user_id, "status": r.status, "count": r.count}
@@ -252,16 +262,22 @@ async def user_activity(
     """
     cutoff_date = _get_cutoff_date(period)
     
+    # ✓ FIXED: Correct joins to get user_id from work owners
     result = db.query(
-        Work.user_id,
+        WorkCollaborator.user_id,
         func.count(func.distinct(Work.id)).label("works_created"),
         func.count(func.distinct(File.id)).label("files_created"),
         func.count(func.distinct(Extraction.id)).label("extractions_run")
-    ).outerjoin(File, Work.id == File.work_id).outerjoin(
+    ).join(
+        Work, WorkCollaborator.work_id == Work.id
+    ).outerjoin(
+        File, Work.id == File.work_id
+    ).outerjoin(
         Extraction, Work.id == Extraction.work_id
     ).filter(
-        Work.created_at >= cutoff_date
-    ).group_by(Work.user_id).all()
+        Work.created_at >= cutoff_date,
+        WorkCollaborator.role == "owner"  # Only count work owners
+    ).group_by(WorkCollaborator.user_id).all()
     
     data = [
         {

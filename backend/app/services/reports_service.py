@@ -523,17 +523,26 @@ async def generate_excel_report(
     try:
         logger.info(f"Generating Excel report for work {work_id}")
         
-        # Download template from Cloudinary
+        # ✓ FIXED: Download template with error handling
         logger.info(f"Downloading template from: {template_url}")
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.get(template_url)
-            response.raise_for_status()
+            response.raise_for_status()  # ✓ Raise on 4xx/5xx
+            
             template_bytes = response.content
+        
+        # ✓ FIXED: Validate template file
+        if len(template_bytes) == 0:
+            raise ValueError("Template file is empty - Cloudinary returned empty content")
+        
+        logger.info(f"Downloaded template: {len(template_bytes)} bytes")
         
         # Save to temp file
         with tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False) as tmp:
             tmp.write(template_bytes)
             template_path = tmp.name
+        
+        logger.debug(f"Template saved to: {template_path}")
         
         # Get equipment for this work
         equipment_list = db.query(Equipment).filter(
@@ -541,13 +550,16 @@ async def generate_excel_report(
         ).all()
         
         if not equipment_list:
-            raise ValueError("No equipment found for this work")
+            raise ValueError("No equipment found for this work - cannot generate report")
         
         logger.info(f"Found {len(equipment_list)} equipment items")
         
         # Generate Excel
         generator = ExcelReportGenerator(template_path)
         excel_bytes = generator.generate_from_equipment(equipment_list)
+        
+        if len(excel_bytes) == 0:
+            raise ValueError("Excel generation failed - no bytes produced")
         
         # Upload to Cloudinary
         timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
@@ -558,12 +570,24 @@ async def generate_excel_report(
             filename=filename
         )
         
-        logger.info(f"✅ Excel report uploaded: {file_url}")
+        logger.info(f"[OK] Excel report uploaded: {file_url}")
         
         # Cleanup temp file
         os.unlink(template_path)
         
         return file_url
+    
+    except httpx.HTTPError as e:
+        logger.error(f"[ERROR] Failed to download template from Cloudinary: {str(e)}")
+        raise ValueError(f"Template download failed: {str(e)}")
+    
+    except ValueError as e:
+        logger.error(f"[ERROR] Excel generation failed: {str(e)}")
+        raise
+    
+    except Exception as e:
+        logger.error(f"[ERROR] Unexpected error generating Excel: {str(e)}", exc_info=True)
+        raise
     
     except Exception as e:
         logger.error(f"❌ Error generating Excel: {str(e)}")
@@ -589,17 +613,26 @@ async def generate_powerpoint_report(
     try:
         logger.info(f"Generating PowerPoint report for work {work_id}")
         
-        # Download template from Cloudinary
+        # ✓ FIXED: Download template with error handling
         logger.info(f"Downloading template from: {template_url}")
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.get(template_url)
-            response.raise_for_status()
+            response.raise_for_status()  # ✓ Raise on 4xx/5xx
+            
             template_bytes = response.content
+        
+        # ✓ FIXED: Validate template file
+        if len(template_bytes) == 0:
+            raise ValueError("Template file is empty - Cloudinary returned empty content")
+        
+        logger.info(f"Downloaded template: {len(template_bytes)} bytes")
         
         # Save to temp file
         with tempfile.NamedTemporaryFile(suffix='.pptx', delete=False) as tmp:
             tmp.write(template_bytes)
             template_path = tmp.name
+        
+        logger.debug(f"Template saved to: {template_path}")
         
         # Get equipment for this work
         equipment_list = db.query(Equipment).filter(
@@ -607,13 +640,16 @@ async def generate_powerpoint_report(
         ).all()
         
         if not equipment_list:
-            raise ValueError("No equipment found for this work")
+            raise ValueError("No equipment found for this work - cannot generate report")
         
         logger.info(f"Found {len(equipment_list)} equipment items")
         
         # Generate PowerPoint
         generator = PowerPointReportGenerator(template_path)
         ppt_bytes = generator.generate_from_equipment(equipment_list)
+        
+        if len(ppt_bytes) == 0:
+            raise ValueError("PowerPoint generation failed - no bytes produced")
         
         # Upload to Cloudinary
         timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
@@ -624,13 +660,21 @@ async def generate_powerpoint_report(
             filename=filename
         )
         
-        logger.info(f"✅ PowerPoint report uploaded: {file_url}")
+        logger.info(f"[OK] PowerPoint report uploaded: {file_url}")
         
         # Cleanup temp file
         os.unlink(template_path)
         
         return file_url
     
+    except httpx.HTTPError as e:
+        logger.error(f"[ERROR] Failed to download template from Cloudinary: {str(e)}")
+        raise ValueError(f"Template download failed: {str(e)}")
+    
+    except ValueError as e:
+        logger.error(f"[ERROR] PowerPoint generation failed: {str(e)}")
+        raise
+    
     except Exception as e:
-        logger.error(f"❌ Error generating PowerPoint: {str(e)}")
+        logger.error(f"[ERROR] Unexpected error generating PowerPoint: {str(e)}", exc_info=True)
         raise
