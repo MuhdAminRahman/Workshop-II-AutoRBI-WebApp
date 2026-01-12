@@ -26,7 +26,9 @@ from app.services.extraction_service import (
 )
 from app.services.permission_service import can_view, can_edit
 from app.utils.cloudinary_util import upload_pdf_to_cloudinary
-
+from datetime import datetime
+from sqlalchemy import desc
+from pydantic import BaseModel
 logger = logging.getLogger(__name__)
 
 # Create router
@@ -34,6 +36,106 @@ router = APIRouter()
 
 # Store WebSocket connections for progress updates
 active_connections: dict = {}
+
+
+# ============================================================================
+# SCHEMA
+# ============================================================================
+
+class LatestExtractionIdResponse(BaseModel):
+    """Response with latest extraction ID for a work"""
+    work_id: int
+    extraction_id: int
+    status: str
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+
+# ============================================================================
+# GET LATEST EXTRACTION ID - GET /api/works/{workId}/extraction/latest
+# ============================================================================
+
+
+@router.get(
+    "/works/{work_id}/extraction/latest",
+    response_model=LatestExtractionIdResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Get latest extraction ID",
+    description="Get the latest extraction job ID for a work",
+)
+async def get_latest_extraction_id(
+    work_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> LatestExtractionIdResponse:
+    """
+    Get the latest extraction ID for a work.
+    Requires view permission on work.
+    
+    Args:
+        work_id: Work project ID
+        current_user: Current user (auto-injected)
+        db: Database session (auto-injected)
+    
+    Returns:
+        LatestExtractionIdResponse with latest extraction info
+    
+    Raises:
+        HTTPException 404: If work not found or no extractions exist
+        HTTPException 403: If user doesn't have access
+    
+    Example:
+        GET /api/works/1/extraction/latest
+        
+        Response:
+        {
+            "work_id": 1,
+            "extraction_id": 5,
+            "status": "in_progress",
+            "created_at": "2024-01-15T10:30:00"
+        }
+    """
+    logger.info(f"Getting latest extraction ID for work {work_id}")
+    
+    # âœ… Permission check - require view permission
+    if not can_view(db, work_id, current_user.id):
+        logger.warning(f"User {current_user.username} tried to access unauthorized work {work_id}")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have access to this work",
+        )
+    
+    # Verify work exists
+    work = db.query(Work).filter(Work.id == work_id).first()
+    if not work:
+        logger.warning(f"Work not found: {work_id}")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Work not found",
+        )
+    
+    # Get latest extraction ordered by created_at descending
+    latest_extraction = db.query(Extraction).filter(
+        Extraction.work_id == work_id
+    ).order_by(desc(Extraction.created_at)).first()
+    
+    if not latest_extraction:
+        logger.warning(f"No extractions found for work {work_id}")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No extractions found for this work",
+        )
+    
+    logger.info(f"âœ… Found latest extraction {latest_extraction.id} for work {work_id}")
+    
+    return LatestExtractionIdResponse(
+        work_id=work_id,
+        extraction_id=latest_extraction.id,
+        status=latest_extraction.status,
+        created_at=latest_extraction.created_at,
+    )
 
 # ============================================================================
 # START EXTRACTION - POST /api/works/{workId}/extraction/start
