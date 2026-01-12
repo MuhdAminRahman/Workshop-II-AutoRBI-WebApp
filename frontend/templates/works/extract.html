@@ -489,8 +489,8 @@ async function pollExtractionUntilComplete(extractionId, fileName) {
         const maxPolls = 300;
         let completionLogged = false;
         
-        // Polling interval for both single and multi-file: 5 seconds for deployed backend stability
-        const pollInterval = 10000;
+        // Polling interval for both single and multi-file: 20 seconds for deployed backend stability
+        const pollInterval = 20000;
         
         const checkInterval = setInterval(async () => {
             pollCount++;
@@ -507,10 +507,22 @@ async function pollExtractionUntilComplete(extractionId, fileName) {
                 const response = await fetch(`/works/extraction/${extractionId}/status`);
                 
                 if (!response.ok) {
+                    // 502 errors are temporary backend overload - don't fail, just skip this poll
+                    if (response.status === 502) {
+                        console.warn(`Backend overloaded (502) for ${fileName}, will retry next poll...`);
+                        return; // Continue polling without counting as error
+                    }
                     throw new Error(`HTTP ${response.status}`);
                 }
                 
-                const data = await response.json();
+                let data;
+                try {
+                    data = await response.json();
+                } catch (parseError) {
+                    console.warn(`Failed to parse JSON response for ${fileName}, backend may be overloaded`);
+                    return; // Continue polling without failing
+                }
+                
                 const status = (data.status || 'pending').toLowerCase();
                 
                 // Store progress for multi-file aggregation (minimal operations)
@@ -543,16 +555,16 @@ async function pollExtractionUntilComplete(extractionId, fileName) {
                         }).catch(err => console.error('Failed to log extraction activity:', err));
                     }
                     resolve(true);
-                } else if (checkStatus === 'failed' || checkStatus === 'error') {
+                } else if (status === 'failed' || status === 'error') {
                     clearInterval(checkInterval);
                     addLog(`✗ Failed: ${fileName} - ${data.error_message || data.message || 'Unknown error'}`, 'error');
                     resolve(false);
-                } else if (checkStatus === 'pending' || checkStatus === 'in_progress' || checkStatus === 'processing') {
+                } else if (status === 'pending' || status === 'in_progress' || status === 'processing') {
                     // Continue polling
-                    console.log(`${fileName} status: ${checkStatus}`);
+                    console.log(`${fileName} status: ${status}`);
                 } else {
                     // Unknown status
-                    console.warn(`Unknown status for ${fileName}: ${checkStatus}`);
+                    console.warn(`Unknown status for ${fileName}: ${status}`);
                 }
             } catch (error) {
                 clearInterval(checkInterval);
@@ -1057,11 +1069,19 @@ document.getElementById('uploadForm').addEventListener('submit', function(e) {
     .then(response => {
         // Check if response is ok (status 200-299)
         if (!response.ok) {
-            return response.json().then(data => {
+            // Try to parse JSON error response
+            return response.json().catch(err => {
+                // If JSON parse fails, return generic error
+                return { error: `Upload failed with status ${response.status}` };
+            }).then(data => {
                 throw new Error(data.error || 'Upload failed');
             });
         }
-        return response.json();
+        // Try to parse successful response
+        return response.json().catch(err => {
+            // If JSON parse fails for successful response, return generic error
+            throw new Error('Server returned invalid response (empty or malformed JSON)');
+        });
     })
     .then(data => {
         if (data.extraction_id) {
