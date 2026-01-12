@@ -490,8 +490,8 @@ async function pollExtractionUntilComplete(extractionId, fileName) {
         const maxPolls = 300;
         let completionLogged = false;
         
-        // Polling interval for both single and multi-file: 2 seconds for faster feedback
-        const pollInterval = 2000;
+        // Polling interval for both single and multi-file: 5 seconds for deployed backend stability
+        const pollInterval = 5000;
         
         const checkInterval = setInterval(async () => {
             pollCount++;
