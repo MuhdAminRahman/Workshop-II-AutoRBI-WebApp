@@ -499,6 +499,7 @@ async def run_extraction(
                     
                     if completeness >= completeness_threshold:
                         logger.info(f"     Completeness {completeness:.0f}% >= threshold, done with Pass 1")
+                        extraction.processed_pages = len(images)
                         break
                     else:
                         logger.info(f"     Completeness {completeness:.0f}% < {completeness_threshold}%, will retry")
