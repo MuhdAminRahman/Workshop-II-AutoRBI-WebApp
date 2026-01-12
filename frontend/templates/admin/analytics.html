@@ -68,6 +68,7 @@
                     <thead class="table-light">
                         <tr>
                             <th>Work Name</th>
+                            <th>Engineer</th>
                             <th class="text-center">Status</th>
                             <th class="text-center">Equipment</th>
                             <th class="text-center">Action</th>
@@ -82,6 +83,15 @@
                                 {% if work.description %}
                                 <br>
                                 <small class="text-muted">{{ work.description[:60] }}</small>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if work.assigned_engineers %}
+                                    {% for engineer in work.assigned_engineers %}
+                                    <span class="badge bg-info text-dark me-1 mb-1">{{ engineer }}</span>
+                                    {% endfor %}
+                                {% else %}
+                                    <span class="badge bg-secondary">Unassigned</span>
                                 {% endif %}
                             </td>
                             <td class="text-center">

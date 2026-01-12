@@ -554,6 +554,11 @@ function validateAllData() {
     let hasErrors = false;
     
     document.querySelectorAll('.editable-field').forEach(field => {
+        // Skip disabled fields (like material_type)
+        if (field.disabled) {
+            return;
+        }
+        
         if (!validateField(field)) {
             hasErrors = true;
             const row = field.closest('.component-row');
@@ -569,17 +574,23 @@ function validateAllData() {
     const issuesList = document.getElementById('validationIssues');
     
     if (hasErrors) {
-        issuesList.innerHTML = issues.map(issue => `<li>${issue}</li>`).join('');
-        alertDiv.classList.remove('d-none');
+        if (issuesList) {
+            issuesList.innerHTML = issues.map(issue => `<li>${issue}</li>`).join('');
+        }
+        if (alertDiv) {
+            alertDiv.classList.remove('d-none');
+        }
         
         // Scroll to first error
-        const firstError = document.querySelector('.editable-field.error');
+        const firstError = document.querySelector('.editable-field.error:not(:disabled)');
         if (firstError) {
             firstError.scrollIntoView({ behavior: 'smooth', block: 'center' });
             firstError.focus();
         }
     } else {
-        alertDiv.classList.add('d-none');
+        if (alertDiv) {
+            alertDiv.classList.add('d-none');
+        }
         showNotification('All data validated successfully!', 'success');
     }
     

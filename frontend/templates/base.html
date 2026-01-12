@@ -56,7 +56,7 @@
                 </a>
             </li>
             <li>
-                <a href="{{ url_for('reports.index') }}" class="{% if request.endpoint and 'reports' in request.endpoint %}active{% endif %}">
+                <a href="{% if session.user.role == 'Admin' %}{{ url_for('admin.admin_reports') }}{% else %}{{ url_for('reports.index') }}{% endif %}" class="{% if request.endpoint and 'reports' in request.endpoint %}active{% endif %}">
                     <i class="bi bi-file-earmark-text"></i> Reports
                 </a>
             </li>

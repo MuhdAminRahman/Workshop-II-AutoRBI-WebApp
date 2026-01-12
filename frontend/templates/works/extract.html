@@ -206,7 +206,7 @@
                         <span id="progressText" class="fw-bold">0%</span>
                     </div>
                 </div>
-                <small class="text-muted">
+                <small class="text-muted" id="pagesContainer" style="display: none;">
                     <span id="pagesProcessed">0</span> of <span id="totalPages">0</span> pages processed
                 </small>
             </div>
@@ -381,6 +381,8 @@
 <script>
 let extractionId = null;
 let pollInterval = null;
+let allExtractionIds = [];  // Track all extraction IDs for multi-file uploads
+let extractionProgressMap = {};  // Track progress for each extraction
 
 // Load masterfile status on page load
 document.addEventListener('DOMContentLoaded', function() {
@@ -396,7 +398,9 @@ document.addEventListener('DOMContentLoaded', function() {
         if (files.length > 1) {
             e.preventDefault();
             
-            // Set flag to prevent Next button from showing during multi-file processing
+            // Reset tracking for new multi-file extraction
+            allExtractionIds = [];
+            extractionProgressMap = {};
             window.isMultiFileProcessing = true;
             
             addLog(`Processing ${files.length} files...`, 'info');
@@ -422,6 +426,14 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (data.extraction_id) {
                         addLog(`[${i + 1}/${files.length}] Started extraction for ${file.name} (ID: ${data.extraction_id})`, 'success');
                         extractionId = data.extraction_id;
+                        
+                        // Add to tracking list for cumulative progress
+                        allExtractionIds.push(data.extraction_id);
+                        extractionProgressMap[data.extraction_id] = {
+                            total_pages: 0,
+                            processed_pages: 0,
+                            status: 'pending'
+                        };
                         
                         // Poll this extraction until complete
                         const success = await pollExtractionUntilComplete(data.extraction_id, file.name);
@@ -451,6 +463,18 @@ document.addEventListener('DOMContentLoaded', function() {
                 statusBadge.innerHTML = '<i class="bi bi-check-circle-fill me-2"></i> COMPLETED';
             }
             
+            // Set progress to 100% on completion
+            const progressBar = document.getElementById('progressBar');
+            const progressText = document.getElementById('progressText');
+            if (progressBar) {
+                progressBar.style.width = '100%';
+                progressBar.setAttribute('aria-valuenow', 100);
+                progressBar.classList.remove('progress-bar-animated');
+            }
+            if (progressText) {
+                progressText.textContent = '100%';
+            }
+            
             // Show success section
             const successSection = document.getElementById('successSection');
             if (successSection) {
@@ -473,12 +497,24 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 // Poll extraction until complete (for multiple files)
+// Aggregates progress from all tracked extraction IDs
 async function pollExtractionUntilComplete(extractionId, fileName) {
     return new Promise((resolve) => {
         let previousProgress = 0;
         let pollCount = 0;
         const maxPolls = 300; // 10 minutes max (300 * 2 seconds)
         let completionLogged = false; // Prevent duplicate logs
+        
+        // Reset UI to show pending status for this extraction
+        const statusBadge = document.getElementById('statusBadge');
+        const progressBar = document.getElementById('progressBar');
+        if (statusBadge) {
+            statusBadge.className = 'badge fs-6 bg-secondary';
+            statusBadge.innerHTML = '<i class="bi bi-hourglass-split me-2"></i> PENDING';
+        }
+        if (progressBar) {
+            progressBar.classList.add('progress-bar-animated');
+        }
         
         const checkInterval = setInterval(async () => {
             pollCount++;
@@ -497,36 +533,72 @@ async function pollExtractionUntilComplete(extractionId, fileName) {
                 
                 console.log(`Poll ${pollCount} for ${fileName}:`, data); // Debug log
                 
-                // Update progress if changed (backend returns progress_percent)
-                const currentProgress = data.progress_percent || data.progress || 0;
-                if (currentProgress !== previousProgress) {
-                    // Update progress bar silently for multi-file (without showing Next button)
-                    const progressBar = document.getElementById('progressBar');
-                    const progressText = document.getElementById('progressText');
-                    const pagesProcessed = document.getElementById('pagesProcessed');
-                    const totalPagesEl = document.getElementById('totalPages');
-                    
-                    if (progressBar) {
-                        progressBar.style.width = currentProgress + '%';
-                        progressBar.setAttribute('aria-valuenow', currentProgress);
+                // Store this extraction's progress
+                extractionProgressMap[extractionId] = {
+                    total_pages: data.total_pages || 0,
+                    processed_pages: data.processed_pages || 0,
+                    status: data.status || 'pending'
+                };
+                
+                // ===== CALCULATE CUMULATIVE PROGRESS FROM ALL TRACKED EXTRACTIONS =====
+                let totalPages = 0;
+                let processedPages = 0;
+                for (let id of allExtractionIds) {
+                    if (extractionProgressMap[id]) {
+                        totalPages += extractionProgressMap[id].total_pages || 0;
+                        processedPages += extractionProgressMap[id].processed_pages || 0;
                     }
-                    if (progressText) {
-                        progressText.textContent = Math.round(currentProgress) + '%';
-                    }
-                    if (pagesProcessed && data.processed_pages) {
-                        pagesProcessed.textContent = data.processed_pages;
-                    }
-                    if (totalPagesEl && data.total_pages) {
-                        totalPagesEl.textContent = data.total_pages;
-                    }
-                    
-                    previousProgress = currentProgress;
                 }
                 
-                // Check status - handle all possible status values
-                const status = data.status ? data.status.toLowerCase() : '';
+                const cumulativeProgress = (processedPages / totalPages * 100) || 0;
                 
-                if (status === 'completed' || status === 'success') {
+                // Update progress bar with cumulative progress
+                const progressBar = document.getElementById('progressBar');
+                const progressText = document.getElementById('progressText');
+                const pagesProcessed = document.getElementById('pagesProcessed');
+                const totalPagesEl = document.getElementById('totalPages');
+                const pagesContainer = document.getElementById('pagesContainer');
+                
+                if (progressBar && cumulativeProgress !== previousProgress && totalPages > 0) {
+                    progressBar.style.width = cumulativeProgress + '%';
+                    progressBar.setAttribute('aria-valuenow', Math.round(cumulativeProgress));
+                }
+                if (progressText && cumulativeProgress !== previousProgress && totalPages > 0) {
+                    progressText.textContent = Math.round(cumulativeProgress) + '%';
+                }
+                
+                // Only show page counts if we have actual data
+                if (totalPages > 0) {
+                    if (pagesContainer) {
+                        pagesContainer.style.display = 'block';
+                    }
+                    if (pagesProcessed) {
+                        pagesProcessed.textContent = processedPages;
+                    }
+                    if (totalPagesEl) {
+                        totalPagesEl.textContent = totalPages;
+                    }
+                }
+                
+                // Update status badge to show current status
+                const statusBadge = document.getElementById('statusBadge');
+                const statusText = document.getElementById('statusText');
+                const status = data.status ? data.status.toLowerCase() : 'pending';
+                
+                if (statusBadge && (status === 'in_progress' || status === 'processing')) {
+                    statusBadge.className = 'badge fs-6 bg-primary';
+                    statusBadge.innerHTML = '<i class="bi bi-hourglass-split me-2"></i> PROCESSING';
+                }
+                if (statusText && (status === 'in_progress' || status === 'processing')) {
+                    statusText.textContent = 'PROCESSING';
+                }
+                
+                previousProgress = cumulativeProgress;
+                
+                // Check status - handle all possible status values
+                const checkStatus = data.status ? data.status.toLowerCase() : '';
+                
+                if (checkStatus === 'completed' || checkStatus === 'success') {
                     clearInterval(checkInterval);
                     // Only log once
                     if (!completionLogged) {
@@ -547,20 +619,21 @@ async function pollExtractionUntilComplete(extractionId, fileName) {
                         }).catch(err => console.error('Failed to log extraction activity:', err));
                     }
                     resolve(true);
-                } else if (status === 'failed' || status === 'error') {
+                } else if (checkStatus === 'failed' || checkStatus === 'error') {
                     clearInterval(checkInterval);
                     addLog(`✗ Failed: ${fileName} - ${data.error_message || data.message || 'Unknown error'}`, 'error');
                     resolve(false);
-                } else if (status === 'pending' || status === 'in_progress' || status === 'processing') {
+                } else if (checkStatus === 'pending' || checkStatus === 'in_progress' || checkStatus === 'processing') {
                     // Continue polling
-                    console.log(`${fileName} status: ${status}, progress: ${currentProgress}%`);
+                    console.log(`${fileName} status: ${checkStatus}, cumulative progress: ${cumulativeProgress.toFixed(1)}%`);
                 } else {
                     // Unknown status
-                    console.warn(`Unknown status for ${fileName}: ${status}`);
+                    console.warn(`Unknown status for ${fileName}: ${checkStatus}`);
                 }
             } catch (error) {
                 clearInterval(checkInterval);
                 addLog(`✗ Error polling ${fileName}: ${error.message}`, 'error');
+                console.error('Polling error:', error);
                 resolve(false);
             }
         }, 2000);
@@ -733,6 +806,33 @@ function addLog(message, type = 'info') {
     
     logContainer.appendChild(logEntry);
     logContainer.scrollTop = logContainer.scrollHeight;
+    
+    // ===== ADVANCE PROGRESS BAR WITH EACH LOG =====
+    // Skip certain logs that shouldn't advance progress
+    const skipLogsKeywords = ['Completed', 'Click Next', 'All extractions', 'All files'];
+    const shouldSkip = skipLogsKeywords.some(keyword => message.includes(keyword));
+    
+    if (!shouldSkip) {
+        const progressBar = document.getElementById('progressBar');
+        const progressText = document.getElementById('progressText');
+        
+        if (progressBar) {
+            // Get current progress
+            let currentProgress = parseFloat(progressBar.getAttribute('aria-valuenow')) || 0;
+            
+            // Increment by 3-5% per log (random to look natural)
+            const increment = 2 + Math.random() * 3; // 2-5% per log
+            let newProgress = Math.min(currentProgress + increment, 95); // Cap at 95% until actual completion
+            
+            // Update progress bar
+            progressBar.style.width = newProgress + '%';
+            progressBar.setAttribute('aria-valuenow', Math.round(newProgress));
+            
+            if (progressText) {
+                progressText.textContent = Math.round(newProgress) + '%';
+            }
+        }
+    }
 }
 
 // Clear log
@@ -780,18 +880,35 @@ function updateProgress(data) {
     if (progressBar) {
         progressBar.style.width = percentage + '%';
         progressBar.setAttribute('aria-valuenow', percentage);
+        
+        // Keep animation running if still processing (for multi-file)
+        if (status === 'in_progress' || status === 'processing' || status === 'pending') {
+            if (!progressBar.classList.contains('progress-bar-animated')) {
+                progressBar.classList.add('progress-bar-animated');
+            }
+        }
     }
     
     if (progressText) {
         progressText.textContent = Math.round(percentage) + '%';
     }
     
-    if (pagesProcessed) {
-        pagesProcessed.textContent = processedPages;
-    }
-    
-    if (totalPagesEl) {
-        totalPagesEl.textContent = totalPages;
+    // Show pages container only when we have actual data
+    const pagesContainer = document.getElementById('pagesContainer');
+    if (totalPages > 0) {
+        if (pagesContainer) {
+            pagesContainer.style.display = 'block';
+        }
+        if (pagesProcessed) {
+            pagesProcessed.textContent = processedPages;
+        }
+        if (totalPagesEl) {
+            totalPagesEl.textContent = totalPages;
+        }
+    } else {
+        if (pagesContainer) {
+            pagesContainer.style.display = 'none';
+        }
     }
     
     // Log progress updates (not on every poll, only when progress changes)
@@ -842,7 +959,14 @@ function updateProgress(data) {
         }
         
         if (progressBar) {
+            progressBar.style.width = '100%';
+            progressBar.setAttribute('aria-valuenow', 100);
             progressBar.classList.remove('progress-bar-animated');
+        }
+        
+        const progressText = document.getElementById('progressText');
+        if (progressText) {
+            progressText.textContent = '100%';
         }
         
         const successSection = document.getElementById('successSection');

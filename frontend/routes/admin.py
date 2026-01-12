@@ -322,6 +322,33 @@ def admin_analytics():
         flash(f'Error fetching equipment: {str(e)}', 'warning')
     
     try:
+        # Get collaborators for each work
+        print("🔍 Fetching collaborators for each work...")
+        for work in all_works:
+            if not isinstance(work, dict):
+                continue
+            work_id = work.get('id')
+            try:
+                collab_response = api._get(f'/api/works/{work_id}/collaborators')
+                if isinstance(collab_response, dict) and 'collaborators' in collab_response:
+                    collaborators = collab_response.get('collaborators', [])
+                    # Find all engineers (editor role)
+                    engineers = [c for c in collaborators if c.get('role') == 'editor']
+                    if engineers:
+                        work['assigned_engineers'] = [e.get('full_name') or e.get('email') for e in engineers]
+                    else:
+                        work['assigned_engineers'] = []
+                else:
+                    work['assigned_engineers'] = []
+            except Exception as ce:
+                print(f"  ⚠️ Error fetching collaborators for work {work_id}: {ce}")
+                work['assigned_engineers'] = []
+        
+        print(f"✅ Collaborators fetched for all works")
+    except Exception as e:
+        print(f"⚠️ Error fetching collaborators: {e}")
+    
+    try:
         # Get all users
         print("🔍 Fetching all users...")
         users_response = api.get_users(skip=0, limit=1000)
@@ -382,5 +409,112 @@ def admin_analytics():
         all_equipment=all_equipment,
         all_users=all_users,
         works_by_engineer=works_by_engineer
+    )
+
+
+# ============================================================================
+# REPORTS (ADMIN VIEW ONLY)
+# ============================================================================
+
+@admin_bp.route('/reports')
+@admin_required
+def admin_reports():
+    """View all reports (Admin only)"""
+    token = get_auth_token()
+    api = BackendAPI(token)
+    
+    all_works = []
+    
+    try:
+        # Get all works for all engineers
+        print("🔍 Fetching admin works for reports...")
+        works_response = api._get('/api/admin/works?skip=0&limit=500')
+        
+        if isinstance(works_response, dict):
+            if 'works' in works_response:
+                all_works = works_response.get('works', [])
+            elif 'error' not in works_response:
+                all_works = works_response
+        elif isinstance(works_response, list):
+            all_works = works_response
+        
+        # Add collaborators (engineers) info to each work
+        for work in all_works:
+            try:
+                collab_response = api._get(f'/api/works/{work.get("id")}/collaborators')
+                if isinstance(collab_response, dict) and 'collaborators' in collab_response:
+                    collaborators = collab_response.get('collaborators', [])
+                    # Find all engineers (editor role)
+                    engineers = [c for c in collaborators if c.get('role') == 'editor']
+                    if engineers:
+                        # Store engineers as list for template to display as separate badges
+                        work['assigned_engineers'] = [e.get('full_name') or e.get('email') for e in engineers]
+                    else:
+                        work['assigned_engineers'] = []
+                else:
+                    work['assigned_engineers'] = []
+            except Exception as e:
+                print(f"⚠️ Error fetching collaborators for work {work.get('id')}: {e}")
+                work['assigned_engineers'] = []
+        
+        print(f"✅ Got {len(all_works)} works for reports")
+    except Exception as e:
+        print(f"⚠️ Error fetching works: {e}")
+        flash(f'Error fetching works: {str(e)}', 'warning')
+    
+    return render_template(
+        'admin/reports.html',
+        all_works=all_works
+    )
+
+
+@admin_bp.route('/reports/<int:work_id>')
+@admin_required
+def admin_view_report(work_id):
+    """View report for specific work (Admin only)"""
+    token = get_auth_token()
+    api = BackendAPI(token)
+    
+    # Get all works and find the one matching work_id
+    works_response = api._get('/api/admin/works?skip=0&limit=500')
+    
+    work = None
+    if isinstance(works_response, dict) and 'works' in works_response:
+        works = works_response.get('works', [])
+    elif isinstance(works_response, list):
+        works = works_response
+    else:
+        works = []
+    
+    # Find the specific work by ID
+    for w in works:
+        if w.get('id') == work_id:
+            work = w
+            break
+    
+    if not work:
+        flash('Work not found', 'danger')
+        return redirect(url_for('admin.admin_reports'))
+    
+    # Get generated reports for this work - use correct endpoint
+    reports_response = api._get(f'/api/reports/{work_id}/reports')
+    
+    if isinstance(reports_response, dict) and 'reports' in reports_response:
+        reports = reports_response.get('reports', [])
+    elif isinstance(reports_response, list):
+        reports = reports_response
+    else:
+        reports = []
+    
+    print(f"📊 Reports response: {reports_response}")
+    print(f"✅ Got {len(reports)} reports")
+    print(f"💼 Work object: {work}")
+    print(f"💼 Work name: {work.get('name')}")
+    
+    return render_template(
+        'admin/view_report.html',
+        work=work,
+        reports=reports,
+        work_id=work_id
     )
 

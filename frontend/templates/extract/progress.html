@@ -180,7 +180,8 @@
             addLog(data.message, 'info');
         }
         
-        if (data.status === 'completed') {
+        // Only show completion if status is completed AND all pages processed
+        if (data.status === 'completed' && processed >= total && total > 0) {
             document.getElementById('progressBar').classList.remove('progress-bar-animated');
             document.getElementById('completionSection').classList.remove('d-none');
             addLog('✓ Extraction completed successfully!', 'success');
