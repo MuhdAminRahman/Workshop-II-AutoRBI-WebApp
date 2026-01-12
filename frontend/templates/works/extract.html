@@ -510,6 +510,7 @@ async function pollExtractionUntilComplete(extractionId, fileName) {
                     // 502 errors are temporary backend overload - don't fail, just skip this poll
                     if (response.status === 502) {
                         console.warn(`Backend overloaded (502) for ${fileName}, will retry next poll...`);
+                        // addLog(`⚠ Backend busy (502) - retrying ${fileName}...`, 'warning');
                         return; // Continue polling without counting as error
                     }
                     throw new Error(`HTTP ${response.status}`);
