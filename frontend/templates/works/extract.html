@@ -192,25 +192,6 @@
             </div>
 
             <!-- Progress Bar -->
-            <div class="mb-3">
-                <h6 class="text-muted mb-2">Overall Progress</h6>
-                <div class="progress" style="height: 30px;">
-                    <div 
-                        id="progressBar" 
-                        class="progress-bar progress-bar-striped progress-bar-animated" 
-                        role="progressbar" 
-                        style="width: 0%;"
-                        aria-valuenow="0" 
-                        aria-valuemin="0" 
-                        aria-valuemax="100">
-                        <span id="progressText" class="fw-bold">0%</span>
-                    </div>
-                </div>
-                <small class="text-muted" id="pagesContainer" style="display: none;">
-                    <span id="pagesProcessed">0</span> of <span id="totalPages">0</span> pages processed
-                </small>
-            </div>
-
             <!-- Extraction Log Terminal -->
             <div class="mb-3">
                 <div class="d-flex justify-content-between align-items-center mb-2">
@@ -383,6 +364,9 @@ let extractionId = null;
 let pollInterval = null;
 let allExtractionIds = [];  // Track all extraction IDs for multi-file uploads
 let extractionProgressMap = {};  // Track progress for each extraction
+let fakeProgressIntervals = {};  // Store fake progress intervals per extraction
+let sharedFakeProgressInterval = null;  // Single interval for multi-file extraction
+let isMultiFileExtraction = false;  // Flag to track if this is multi-file
 
 // Load masterfile status on page load
 document.addEventListener('DOMContentLoaded', function() {
@@ -402,10 +386,14 @@ document.addEventListener('DOMContentLoaded', function() {
             allExtractionIds = [];
             extractionProgressMap = {};
             window.isMultiFileProcessing = true;
+            isMultiFileExtraction = true;  // Set flag for multi-file
             
             addLog(`Processing ${files.length} files...`, 'info');
             document.getElementById('extractionProgress').style.display = 'block';
             document.getElementById('submitBtn').disabled = true;
+            
+            // Start shared fake progress for multi-file extraction
+            startSharedFakeProgress();
             
             for (let i = 0; i < files.length; i++) {
                 const file = files[i];
@@ -453,8 +441,10 @@ document.addEventListener('DOMContentLoaded', function() {
             addLog('All files processed!', 'success');
             document.getElementById('submitBtn').disabled = false;
             
-            // Clear multi-file processing flag
+            // Clear multi-file processing flag and stop shared progress
             window.isMultiFileProcessing = false;
+            isMultiFileExtraction = false;
+            stopSharedFakeProgress();
             
             // Update status badge to completed now that all files are done
             const statusBadge = document.getElementById('statusBadge');
@@ -487,7 +477,22 @@ document.addEventListener('DOMContentLoaded', function() {
                 nextButtonContainer.classList.remove('d-none');
             }
             
+            // Stop shared fake progress and jump to 100%
+            stopSharedFakeProgress();
+            const fakeProgressBar = document.getElementById('fakeProgressBar');
+            const fakeProgressText = document.getElementById('fakeProgressText');
+            if (fakeProgressBar) {
+                fakeProgressBar.style.width = '100%';
+                fakeProgressBar.setAttribute('aria-valuenow', 100);
+            }
+            if (fakeProgressText) {
+                fakeProgressText.textContent = '100%';
+            }
+            
             addLog('All extractions completed! Click Next to review the data.', 'info');
+            
+            // Reset multi-file flag
+            isMultiFileExtraction = false;
             
             // IMPORTANT: Return here to prevent form from submitting normally
             return;
@@ -495,6 +500,107 @@ document.addEventListener('DOMContentLoaded', function() {
         // For single file, let the form submit normally
     });
 });
+
+// Start shared fake progress for multi-file extraction (single timer for all files)
+function startSharedFakeProgress() {
+    // Clear any existing shared interval
+    if (sharedFakeProgressInterval) {
+        clearInterval(sharedFakeProgressInterval);
+    }
+    
+    let currentProgress = 0;
+    const fakeProgressBar = document.getElementById('fakeProgressBar');
+    const fakeProgressText = document.getElementById('fakeProgressText');
+    
+    // Update every 500ms with varying increments
+    sharedFakeProgressInterval = setInterval(() => {
+        // Don't update if we're above 95% or if polling has already jumped ahead
+        const currentWidth = parseFloat(fakeProgressBar?.style.width || 0);
+        if (currentWidth >= 95) {
+            return;  // Stop incrementing if polling has taken over
+        }
+        
+        let increment;
+        if (currentProgress < 30) {
+            increment = 0.8 + Math.random() * 1.2; // 0.8-2%
+        } else if (currentProgress < 60) {
+            increment = 0.4 + Math.random() * 0.8; // 0.4-1.2%
+        } else if (currentProgress < 85) {
+            increment = 0.2 + Math.random() * 0.4; // 0.2-0.6%
+        } else {
+            increment = 0.1 + Math.random() * 0.2; // 0.1-0.3%
+        }
+        
+        currentProgress = Math.min(currentProgress + increment, 95);
+        
+        if (fakeProgressBar && currentWidth < 95) {
+            fakeProgressBar.style.width = currentProgress + '%';
+            fakeProgressBar.setAttribute('aria-valuenow', Math.round(currentProgress));
+        }
+        if (fakeProgressText && currentWidth < 95) {
+            fakeProgressText.textContent = Math.round(currentProgress) + '%';
+        }
+    }, 500);
+}
+
+// Stop shared fake progress
+function stopSharedFakeProgress() {
+    if (sharedFakeProgressInterval) {
+        clearInterval(sharedFakeProgressInterval);
+        sharedFakeProgressInterval = null;
+    }
+}
+
+// Start fake progress bar animation for a SINGLE file extraction
+function startFakeProgress(extractionId) {
+    // Only use individual fake progress for single file extraction
+    // For multi-file, the shared progress is already running
+    if (isMultiFileExtraction) {
+        return;  // Skip individual fake progress in multi-file mode
+    }
+    
+    // Clear any existing interval for this extraction
+    if (fakeProgressIntervals[extractionId]) {
+        clearInterval(fakeProgressIntervals[extractionId]);
+    }
+    
+    let currentProgress = 0;
+    const fakeProgressBar = document.getElementById('fakeProgressBar');
+    const fakeProgressText = document.getElementById('fakeProgressText');
+    
+    // Update every 500ms with varying increments (smaller as we get higher)
+    fakeProgressIntervals[extractionId] = setInterval(() => {
+        // Slower increments as progress increases
+        let increment;
+        if (currentProgress < 30) {
+            increment = 1 + Math.random() * 2; // 1-3%
+        } else if (currentProgress < 60) {
+            increment = 0.5 + Math.random() * 1.5; // 0.5-2%
+        } else if (currentProgress < 85) {
+            increment = 0.3 + Math.random() * 0.7; // 0.3-1%
+        } else {
+            increment = 0.1 + Math.random() * 0.3; // 0.1-0.4%
+        }
+        
+        currentProgress = Math.min(currentProgress + increment, 95); // Cap at 95%
+        
+        if (fakeProgressBar) {
+            fakeProgressBar.style.width = currentProgress + '%';
+            fakeProgressBar.setAttribute('aria-valuenow', Math.round(currentProgress));
+        }
+        if (fakeProgressText) {
+            fakeProgressText.textContent = Math.round(currentProgress) + '%';
+        }
+    }, 500);
+}
+
+// Stop fake progress for an extraction
+function stopFakeProgress(extractionId) {
+    if (fakeProgressIntervals[extractionId]) {
+        clearInterval(fakeProgressIntervals[extractionId]);
+        delete fakeProgressIntervals[extractionId];
+    }
+}
 
 // Poll extraction until complete (for multiple files)
 // Aggregates progress from all tracked extraction IDs
@@ -515,6 +621,9 @@ async function pollExtractionUntilComplete(extractionId, fileName) {
         if (progressBar) {
             progressBar.classList.add('progress-bar-animated');
         }
+        
+        // Start fake progress immediately when extraction begins
+        startFakeProgress(extractionId);
         
         const checkInterval = setInterval(async () => {
             pollCount++;
@@ -553,18 +662,18 @@ async function pollExtractionUntilComplete(extractionId, fileName) {
                 const cumulativeProgress = (processedPages / totalPages * 100) || 0;
                 
                 // Update progress bar with cumulative progress
-                const progressBar = document.getElementById('progressBar');
-                const progressText = document.getElementById('progressText');
+                const fakeProgressBar = document.getElementById('fakeProgressBar');
+                const fakeProgressText = document.getElementById('fakeProgressText');
                 const pagesProcessed = document.getElementById('pagesProcessed');
                 const totalPagesEl = document.getElementById('totalPages');
                 const pagesContainer = document.getElementById('pagesContainer');
                 
-                if (progressBar && cumulativeProgress !== previousProgress && totalPages > 0) {
-                    progressBar.style.width = cumulativeProgress + '%';
-                    progressBar.setAttribute('aria-valuenow', Math.round(cumulativeProgress));
+                if (fakeProgressBar && cumulativeProgress !== previousProgress && totalPages > 0) {
+                    fakeProgressBar.style.width = cumulativeProgress + '%';
+                    fakeProgressBar.setAttribute('aria-valuenow', Math.round(cumulativeProgress));
                 }
-                if (progressText && cumulativeProgress !== previousProgress && totalPages > 0) {
-                    progressText.textContent = Math.round(cumulativeProgress) + '%';
+                if (fakeProgressText && cumulativeProgress !== previousProgress && totalPages > 0) {
+                    fakeProgressText.textContent = Math.round(cumulativeProgress) + '%';
                 }
                 
                 // Only show page counts if we have actual data
@@ -572,12 +681,7 @@ async function pollExtractionUntilComplete(extractionId, fileName) {
                     if (pagesContainer) {
                         pagesContainer.style.display = 'block';
                     }
-                    if (pagesProcessed) {
-                        pagesProcessed.textContent = processedPages;
-                    }
-                    if (totalPagesEl) {
-                        totalPagesEl.textContent = totalPages;
-                    }
+                    // Pages are hidden as per user request
                 }
                 
                 // Update status badge to show current status
@@ -600,6 +704,18 @@ async function pollExtractionUntilComplete(extractionId, fileName) {
                 
                 if (checkStatus === 'completed' || checkStatus === 'success') {
                     clearInterval(checkInterval);
+                    // Stop fake progress and jump to 100%
+                    stopFakeProgress(extractionId);
+                    const fakeProgressBar = document.getElementById('fakeProgressBar');
+                    const fakeProgressText = document.getElementById('fakeProgressText');
+                    if (fakeProgressBar) {
+                        fakeProgressBar.style.width = '100%';
+                        fakeProgressBar.setAttribute('aria-valuenow', 100);
+                    }
+                    if (fakeProgressText) {
+                        fakeProgressText.textContent = '100%';
+                    }
+                    
                     // Only log once
                     if (!completionLogged) {
                         addLog(`✓ Completed: ${fileName} (${data.equipment_count || 0} equipment)`, 'success');
@@ -621,6 +737,7 @@ async function pollExtractionUntilComplete(extractionId, fileName) {
                     resolve(true);
                 } else if (checkStatus === 'failed' || checkStatus === 'error') {
                     clearInterval(checkInterval);
+                    stopFakeProgress(extractionId);
                     addLog(`✗ Failed: ${fileName} - ${data.error_message || data.message || 'Unknown error'}`, 'error');
                     resolve(false);
                 } else if (checkStatus === 'pending' || checkStatus === 'in_progress' || checkStatus === 'processing') {
@@ -632,6 +749,7 @@ async function pollExtractionUntilComplete(extractionId, fileName) {
                 }
             } catch (error) {
                 clearInterval(checkInterval);
+                stopFakeProgress(extractionId);
                 addLog(`✗ Error polling ${fileName}: ${error.message}`, 'error');
                 console.error('Polling error:', error);
                 resolve(false);
@@ -862,8 +980,8 @@ function updateProgress(data) {
     
     const statusText = document.getElementById('statusText');
     const statusBadge = document.getElementById('statusBadge');
-    const progressBar = document.getElementById('progressBar');
-    const progressText = document.getElementById('progressText');
+    const fakeProgressBar = document.getElementById('fakeProgressBar');
+    const fakeProgressText = document.getElementById('fakeProgressText');
     const pagesProcessed = document.getElementById('pagesProcessed');
     const totalPagesEl = document.getElementById('totalPages');
     
@@ -876,39 +994,27 @@ function updateProgress(data) {
         statusBadge.className = 'badge fs-6 ' + (statusColors[status] || 'bg-secondary');
     }
     
-    // Update progress bar
-    if (progressBar) {
-        progressBar.style.width = percentage + '%';
-        progressBar.setAttribute('aria-valuenow', percentage);
+    // Update fake progress bar
+    if (fakeProgressBar) {
+        fakeProgressBar.style.width = percentage + '%';
+        fakeProgressBar.setAttribute('aria-valuenow', percentage);
         
         // Keep animation running if still processing (for multi-file)
         if (status === 'in_progress' || status === 'processing' || status === 'pending') {
-            if (!progressBar.classList.contains('progress-bar-animated')) {
-                progressBar.classList.add('progress-bar-animated');
+            if (!fakeProgressBar.classList.contains('progress-bar-animated')) {
+                fakeProgressBar.classList.add('progress-bar-animated');
             }
         }
     }
     
-    if (progressText) {
-        progressText.textContent = Math.round(percentage) + '%';
+    if (fakeProgressText) {
+        fakeProgressText.textContent = Math.round(percentage) + '%';
     }
     
-    // Show pages container only when we have actual data
+    // Pages container is hidden as per user request
     const pagesContainer = document.getElementById('pagesContainer');
-    if (totalPages > 0) {
-        if (pagesContainer) {
-            pagesContainer.style.display = 'block';
-        }
-        if (pagesProcessed) {
-            pagesProcessed.textContent = processedPages;
-        }
-        if (totalPagesEl) {
-            totalPagesEl.textContent = totalPages;
-        }
-    } else {
-        if (pagesContainer) {
-            pagesContainer.style.display = 'none';
-        }
+    if (pagesContainer) {
+        pagesContainer.style.display = 'none';
     }
     
     // Log progress updates (not on every poll, only when progress changes)
@@ -958,15 +1064,19 @@ function updateProgress(data) {
             statusBadge.innerHTML = '<i class="bi bi-check-circle-fill me-2"></i> COMPLETED';
         }
         
-        if (progressBar) {
-            progressBar.style.width = '100%';
-            progressBar.setAttribute('aria-valuenow', 100);
-            progressBar.classList.remove('progress-bar-animated');
+        // Stop fake progress and jump to 100%
+        stopFakeProgress(extractionId);
+        
+        const fakeProgressBar = document.getElementById('fakeProgressBar');
+        if (fakeProgressBar) {
+            fakeProgressBar.style.width = '100%';
+            fakeProgressBar.setAttribute('aria-valuenow', 100);
+            fakeProgressBar.classList.remove('progress-bar-animated');
         }
         
-        const progressText = document.getElementById('progressText');
-        if (progressText) {
-            progressText.textContent = '100%';
+        const fakeProgressText = document.getElementById('fakeProgressText');
+        if (fakeProgressText) {
+            fakeProgressText.textContent = '100%';
         }
         
         const successSection = document.getElementById('successSection');
@@ -996,6 +1106,9 @@ function updateProgress(data) {
             clearInterval(pollInterval);
             pollInterval = null;
         }
+        
+        // Stop fake progress
+        stopFakeProgress(extractionId);
         
         // Prevent duplicate failure messages
         if (window.extractionFailed) {
@@ -1097,12 +1210,16 @@ document.getElementById('uploadForm').addEventListener('submit', function(e) {
     // Reset completion flags for new extraction
     window.extractionCompleted = false;
     window.extractionFailed = false;
+    isMultiFileExtraction = false;  // Reset multi-file flag for single file
     
     // Clear any existing polling interval
     if (pollInterval) {
         clearInterval(pollInterval);
         pollInterval = null;
     }
+    
+    // Stop shared fake progress if running
+    stopSharedFakeProgress();
     
     const submitBtn = document.getElementById('submitBtn');
     const fileInput = document.getElementById('pdfFile');
@@ -1178,6 +1295,9 @@ document.getElementById('uploadForm').addEventListener('submit', function(e) {
                 processed_pages: 0,
                 progress_percent: 0
             });
+            
+            // Start fake progress for single file extraction
+            startFakeProgress(extractionId);
             
             // Start polling immediately
             pollStatus();
