@@ -839,7 +839,7 @@
      * Watch single extraction via WebSocket
      */
     async function watchExtractionSingleFile(extractionId) {
-        const token = localStorage.getItem('access_token');
+        let token = window.AUTH_TOKEN;
         if (!token) {
             addLog('No auth token', 'error');
             return;
