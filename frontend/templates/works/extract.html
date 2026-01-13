@@ -815,7 +815,19 @@
             });
     }
 
-    // Main form submission handler
+
+    // Fallback: Show review button even if upload failed
+    // This allows users to review data that WAS successfully extracted
+    function showFallbackReviewButton() {
+        addLog(`📋 Showing Review & Edit button - check your data`, 'warning');
+        
+        const nextButtonContainer = document.getElementById('nextButtonContainer');
+        if (nextButtonContainer) {
+            nextButtonContainer.classList.remove('d-none');
+        }
+    }
+
+        // Main form submission handler
     document.getElementById('uploadForm').addEventListener('submit', function (e) {
         e.preventDefault();
 
@@ -873,6 +885,12 @@
             body: formData
         })
             .then(response => {
+                // Handle 502 Gateway Timeout - extraction may have succeeded on backend
+                if (response.status === 502) {
+                    addLog(`⚠️ Server timeout (HTTP 502) - attempting recovery...`, 'warning');
+                    return Promise.reject({ code: 502, message: 'Server timeout' });
+                }
+                
                 if (!response.ok) {
                     return response.json().catch(err => ({ error: `HTTP ${response.status}` }))
                         .then(data => { throw new Error(data.error || 'Upload failed'); });
@@ -893,13 +911,37 @@
                 }
             })
             .catch(error => {
-                addLog(`✗ Upload error: ${error.message}`, 'error');
-
-                const errorSection = document.getElementById('errorSection');
-                const errorText = document.getElementById('errorText');
-                if (errorSection) {
-                    errorSection.classList.remove('d-none');
-                    if (errorText) errorText.textContent = error.message;
+                // 502 timeout recovery: try to find the extraction that was created
+                if (error.code === 502) {
+                    addLog(`Querying server for latest extraction...`, 'info');
+                    
+                    // Give backend time to commit the extraction record
+                    setTimeout(() => {
+                        fetch(`/works/extraction/latest?work_id={{ work.id }}`)
+                            .then(response => {
+                                if (response.ok) return response.json();
+                                throw new Error('Could not recover extraction');
+                            })
+                            .then(data => {
+                                if (data && data.extraction_id) {
+                                    extractionId = data.extraction_id;
+                                    addLog(`✓ Recovery successful! Extraction ID: ${extractionId}`, 'success');
+                                    addLog(`Polling extraction status...`, 'processing');
+                                    
+                                    pollStatus();
+                                    pollInterval = setInterval(pollStatus, 2000);
+                                } else {
+                                    throw new Error('Extraction not found in recovery');
+                                }
+                            })
+                            .catch(recoveryError => {
+                                addLog(`✗ Recovery error: ${recoveryError.message}`, 'error');
+                                showFallbackReviewButton();
+                            });
+                    }, 1000);
+                } else {
+                    addLog(`✗ Upload error: ${error.message}`, 'error');
+                    showFallbackReviewButton();
                 }
             })
             .finally(() => {
