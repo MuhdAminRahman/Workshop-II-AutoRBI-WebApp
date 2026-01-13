@@ -366,7 +366,9 @@
 
 {% block extra_js %}
 <script>
+    // Store Flask auth token for WebSocket connections
     window.AUTH_TOKEN = "{{ auth_token }}";
+    console.log("✓ Auth token initialized:", window.AUTH_TOKEN ? "token present" : "NO TOKEN!");
     let extractionId = null;
     let pollInterval = null;
     let allExtractionIds = [];

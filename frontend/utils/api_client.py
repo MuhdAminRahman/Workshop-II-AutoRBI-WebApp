@@ -55,7 +55,8 @@ class BackendAPI:
                 headers=headers,
                 json=data if not files and data else None,
                 files=files if files else None,
-                data=data if files and data else None
+                data=data if files and data else None,
+                timeout=120
             )
             print(f"Response status: {response.status_code}")
             print(f"Response body: {response.text}")
