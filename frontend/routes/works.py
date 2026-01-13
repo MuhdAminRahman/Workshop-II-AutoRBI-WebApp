@@ -1037,16 +1037,22 @@ def save_components_bulk(work_id):
         data = request.get_json()
         changes = data.get('changes', {})
         
+        print(f"📝 Received changes: {changes}")
+        
         if not changes:
             return jsonify({'success': False, 'error': 'No changes to save'}), 400
         
         # Send bulk update to backend
         response = api.update_components_bulk(work_id, changes)
         
+        print(f"📋 API Response: {response}")
+        
         if 'error' in response:
+            error_msg = parse_error_message(response)
+            print(f"❌ API Error: {error_msg}")
             return jsonify({
                 'success': False,
-                'error': parse_error_message(response)
+                'error': error_msg
             }), 400
         
         # After successful save, mark extraction as completed

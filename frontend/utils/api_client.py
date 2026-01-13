@@ -275,10 +275,38 @@ class BackendAPI:
         """Update multiple components at once
         
         Args:
-            work_id: Work ID
+            work_id: Work ID (not used in the actual API)
             changes: Dict of {component_id: {field: value, ...}}
         """
-        return self._post(f'/api/works/{work_id}/components/bulk-update', data={'changes': changes})
+        # Convert changes dict to the format expected by backend
+        # changes: {'885': {'fluid': 'Water'}} -> component_ids=[885], payload=[{fluid: 'Water'}]
+        try:
+            component_ids = []
+            payload = []
+            
+            for cid_str, values in changes.items():
+                try:
+                    cid = int(cid_str)
+                    component_ids.append(cid)
+                    payload.append(values)
+                except (ValueError, TypeError) as e:
+                    print(f"Warning: Invalid component ID '{cid_str}': {e}")
+                    continue
+            
+            if not component_ids:
+                return {'error': 'No valid component IDs to update'}
+            
+            # Build query string for component IDs
+            query_params = '&'.join([f'component_ids={cid}' for cid in component_ids])
+            
+            # Use PUT method with component IDs in query string and payload in body
+            return self._put(
+                f'/api/equipments/components/bulk?{query_params}',
+                data=payload
+            )
+        except Exception as e:
+            print(f"Error in update_components_bulk: {e}")
+            return {'error': str(e)}
     
     # Equipment endpoints
     def get_equipment_list(self, work_id: int) -> Dict:

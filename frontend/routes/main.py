@@ -96,9 +96,47 @@ def dashboard():
     total_critical_fields = len(all_components) * len(critical_fields)
     completeness_rate = (filled_critical / total_critical_fields * 100) if total_critical_fields > 0 else 0
     
-    # Health score: 40% extraction + 40% completeness + 20% quality (assume high quality)
-    # Quality score set to 20 (full marks, no corrections assumed)
-    avg_health_score = round((extraction_rate * 0.4) + (completeness_rate * 0.4) + 20, 1)
+    # Handle empty work case
+    if total_equipment == 0:
+        avg_health_score = 0
+        risk_level = 'UNKNOWN'
+        status_color = ('#95a5a6', '#7f8c8d')
+    else:
+        # Get correction count (corrections made to equipment in this work)
+        # For now, we'll default to 0 if not available from API
+        correction_count = 0
+        try:
+            # Try to get corrections from API if available
+            for work in works:
+                work_id = work.get('id')
+                if work_id:
+                    # Correction data would come from API if available
+                    # For now, defaulting to 0
+                    pass
+        except:
+            correction_count = 0
+        
+        # Health score: 40% extraction + 40% completeness + (20 - correction_penalty)
+        # Correction penalty: min(20, correction_count * 2)
+        correction_penalty = min(20, correction_count * 2)
+        avg_health_score = round(
+            (extraction_rate * 0.4) + (completeness_rate * 0.4) + (20 - correction_penalty), 
+            1
+        )
+        
+        # Determine risk level and color based on health score
+        if avg_health_score >= 85:
+            risk_level = 'LOW - Ready'
+            status_color = ('#2ecc71', '#27ae60')  # Green
+        elif avg_health_score >= 70:
+            risk_level = 'MEDIUM - Review'
+            status_color = ('#f39c12', '#e67e22')  # Orange
+        elif avg_health_score >= 50:
+            risk_level = 'HIGH - Gaps'
+            status_color = ('#e74c3c', '#c0392b')  # Red
+        else:
+            risk_level = 'CRITICAL'
+            status_color = ('#c0392b', '#8b0000')  # Dark Red
     
     return render_template(
         'dashboard/index.html',
@@ -108,6 +146,9 @@ def dashboard():
         completed_works=completed_works,
         total_equipment=total_equipment,
         avg_health_score=avg_health_score,
+        extraction_rate=extraction_rate,
+        completeness_rate=completeness_rate,
+        risk_level=risk_level,
         now=datetime.now(),
         get_status_badge_class=get_status_badge_class
     )
