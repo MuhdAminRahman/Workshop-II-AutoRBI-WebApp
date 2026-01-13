@@ -62,6 +62,42 @@ async def upload_pdf_to_cloudinary(file: UploadFile) -> str:
         logger.error(f"Failed to upload PDF to Cloudinary: {str(e)}")
         raise
 
+async def upload_pdf_to_cloudinary_from_uploadfile(file: UploadFile, filename: str) -> str:
+    """
+    Stream UploadFile directly to Cloudinary without loading into memory.
+    
+    Args:
+        file: UploadFile object (file-like stream)
+        filename: Original filename
+    
+    Returns:
+        Secure URL of uploaded PDF
+    
+    Raises:
+        Exception: If upload fails
+    """
+    try:
+        logger.info(f"Streaming {filename} to Cloudinary...")
+        
+        # Cloudinary's uploader.upload() accepts file-like objects
+        # It will stream the file without loading it entirely into memory
+        result = cloudinary.uploader.upload(
+            file.file,  # Pass file-like object directly
+            resource_type="raw",
+            folder="autorbi/pdfs",
+            public_id=filename.replace('.pdf', ''),
+            overwrite=True,
+        )
+        
+        pdf_url = result.get('secure_url')
+        logger.info(f"✅ PDF streamed to Cloudinary: {pdf_url}")
+        
+        return pdf_url
+    
+    except Exception as e:
+        logger.error(f"❌ Failed to stream PDF to Cloudinary: {str(e)}")
+        raise
+
 
 async def upload_pdf_to_cloudinary_from_bytes(file_bytes: bytes, filename: str) -> str:
     """

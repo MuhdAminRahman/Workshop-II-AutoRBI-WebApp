@@ -175,12 +175,15 @@ async def start_extraction(
     background_tasks: BackgroundTasks = None,
 ) -> ExtractionStartResponse:
     """
-    FASTEST: Read file immediately, pass bytes to background task.
-    Returns in < 500ms regardless of file size.
+    IDEAL: No file I/O in endpoint at all.
+    - Create record (< 50ms)
+    - Queue task (< 10ms)
+    - Return HTTP 202 (< 100ms)
+    
+    Background task streams UploadFile directly to Cloudinary without loading into memory.
     """
     logger.info(f"Starting extraction for work {work_id} by user {current_user.username}")
     
-    # Permission check
     if not can_edit(db, work_id, current_user.id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Work not found")
     
@@ -191,13 +194,11 @@ async def start_extraction(
     if not file.filename.lower().endswith('.pdf'):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="File must be a PDF (.pdf)",
+            detail="File must be a PDF",
         )
     
     try:
-        # STEP 1: Create extraction record
-        logger.info(f"Creating extraction record for work {work_id}")
-        
+        # Create extraction record
         extraction = Extraction(
             work_id=work_id,
             status=ExtractionStatus.PENDING,
@@ -209,53 +210,43 @@ async def start_extraction(
         db.commit()
         db.refresh(extraction)
         
-        logger.info(f"✅ Extraction record created: {extraction.id}")
+        logger.info(f"✅ Extraction {extraction.id} created")
         
-        # STEP 2: Read file bytes (WHILE STREAM IS AVAILABLE)
-        logger.info(f"Reading file: {file.filename}")
-        file_bytes = await file.read()
-        file_size_mb = len(file_bytes) / (1024 * 1024)
-        logger.info(f"✅ Read {file_size_mb:.2f}MB into memory")
-        
-        # STEP 3: Queue background task with bytes (NOT UploadFile)
+        # Queue background task - pass UploadFile directly
+        # NO file I/O in endpoint!
         if background_tasks:
-            logger.info(f"Queuing background task for extraction {extraction.id}")
             background_tasks.add_task(
-                upload_and_extract_from_bytes,
+                process_extraction,
                 extraction_id=extraction.id,
                 work_id=work_id,
                 filename=file.filename,
-                file_bytes=file_bytes,
+                file=file,
             )
         
-        # STEP 4: Return immediately
-        logger.info(f"Extraction {extraction.id} queued successfully")
-        
+        # Return immediately - < 100ms total
         return ExtractionStartResponse(
             extraction_id=extraction.id,
             work_id=work_id,
             status=ExtractionStatus.PENDING,
-            message=f"Extraction {extraction.id} queued. Processing in background.",
+            message=f"Extraction {extraction.id} queued.",
         )
     
     except HTTPException:
         raise
-    
     except Exception as e:
         logger.error(f"Failed to create extraction: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Failed to start extraction: {str(e)}",
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
-async def upload_and_extract_from_bytes(
+
+async def upload_and_extract_from_upload(
     extraction_id: int,
     work_id: int,
     filename: str,
-    file_bytes: bytes,
+    file: UploadFile,
 ) -> None:
     """
-    Background task: Upload bytes to Cloudinary and run extraction.
+    Background task: Read file from UploadFile, upload to Cloudinary, run extraction.
+    Runs AFTER HTTP response is sent - no timeout!
     """
     from app.db.database import SessionLocal
     from app.utils.cloudinary_util import upload_pdf_to_cloudinary_from_bytes
@@ -273,6 +264,19 @@ async def upload_and_extract_from_bytes(
         
         if not extraction:
             logger.error(f"[Background] Extraction {extraction_id} not found")
+            return
+        
+        # Read file from upload
+        logger.info(f"[Background] Reading file from upload: {filename}")
+        try:
+            file_bytes = await file.read()
+            file_size_mb = len(file_bytes) / (1024 * 1024)
+            logger.info(f"[Background] ✅ Read {file_size_mb:.2f}MB from upload")
+        except Exception as e:
+            logger.error(f"[Background] ❌ Failed to read file: {str(e)}", exc_info=True)
+            extraction.status = ExtractionStatus.FAILED
+            extraction.error_message = f"Failed to read file: {str(e)}"
+            db.commit()
             return
         
         # Upload to Cloudinary
@@ -322,6 +326,87 @@ async def upload_and_extract_from_bytes(
     finally:
         db.close()
 
+# ============================================================================
+# BACKGROUND TASK - STREAMS DIRECTLY TO CLOUDINARY
+# ============================================================================
+
+async def process_extraction(
+    extraction_id: int,
+    work_id: int,
+    filename: str,
+    file: UploadFile,
+) -> None:
+    """
+    Background task: Stream UploadFile directly to Cloudinary.
+    Never loads entire file into memory.
+    
+    Process:
+    1. Stream UploadFile to Cloudinary (file-like object)
+    2. Update extraction with URL
+    3. Run extraction pipeline
+    """
+    from app.db.database import SessionLocal
+    from app.services.extraction_service import run_extraction
+    from app.utils.cloudinary_util import upload_pdf_to_cloudinary_from_uploadfile
+    
+    db = SessionLocal()
+    extraction = None
+    
+    try:
+        logger.info(f"[BG] Processing extraction {extraction_id}")
+        
+        extraction = db.query(Extraction).filter(
+            Extraction.id == extraction_id
+        ).first()
+        
+        if not extraction:
+            logger.error(f"[BG] Extraction {extraction_id} not found")
+            return
+        
+        # Stream UploadFile directly to Cloudinary
+        logger.info(f"[BG] Streaming {filename} to Cloudinary (no memory loading)...")
+        
+        try:
+            # Stream file directly - Cloudinary handles it without loading into memory
+            pdf_url = await upload_pdf_to_cloudinary_from_uploadfile(file, filename)
+            logger.info(f"[BG] ✅ Streamed: {pdf_url}")
+            
+            # Update with URL
+            extraction.pdf_url = pdf_url
+            db.commit()
+            
+        except Exception as e:
+            logger.error(f"[BG] ❌ Upload failed: {str(e)}", exc_info=True)
+            extraction.status = ExtractionStatus.FAILED
+            extraction.error_message = str(e)
+            db.commit()
+            return
+        
+        # Run extraction
+        logger.info(f"[BG] Starting extraction pipeline")
+        try:
+            await run_extraction(
+                work_id=work_id,
+                extraction_id=extraction_id,
+                pdf_url=pdf_url,
+                pdf_filename=filename,
+            )
+            logger.info(f"[BG] ✅ Complete: {extraction_id}")
+        except Exception as e:
+            logger.error(f"[BG] ❌ Extraction failed: {str(e)}", exc_info=True)
+            extraction.status = ExtractionStatus.FAILED
+            extraction.error_message = str(e)
+            db.commit()
+    
+    except Exception as e:
+        logger.error(f"[BG] Unexpected error: {str(e)}", exc_info=True)
+        if extraction:
+            extraction.status = ExtractionStatus.FAILED
+            extraction.error_message = str(e)
+            db.commit()
+    
+    finally:
+        db.close()
 
 # ============================================================================
 # GET EXTRACTION STATUS - GET /api/extractions/{extractionId}/status
