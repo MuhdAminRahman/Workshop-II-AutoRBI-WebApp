@@ -459,7 +459,7 @@ async def websocket_extraction_progress(
                     break
             
             # Wait before next poll (check every 1 second)
-            await asyncio.sleep(1)
+            await asyncio.sleep(10)
     
     except WebSocketDisconnect:
         logger.info(f"WebSocket {extraction_id}: Client disconnected")

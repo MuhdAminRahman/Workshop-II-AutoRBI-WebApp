@@ -635,6 +635,8 @@ def get_extraction_progress(db: Session, extraction_id: int) -> Dict:
     if not extraction:
         return {}
     
+    db.refresh(extraction)
+
     total = extraction.total_pages or 1
     processed = extraction.processed_pages or 0
     percent = (processed / total * 100) if total > 0 else 0
