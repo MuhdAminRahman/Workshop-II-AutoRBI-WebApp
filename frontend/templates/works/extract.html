@@ -18,9 +18,7 @@
             <i class="bi bi-info-circle-fill fs-4 me-3"></i>
             <div>
                 <strong>Work: {{ work.name }}</strong>
-                <p class="mb-0 small">Upload a GA (General Arrangement) drawing PDF file. The system will automatically
-                    extract equipment data using AI. After extraction, you'll review and edit the data in table format.
-                </p>
+                <p class="mb-0 small">Upload a GA (General Arrangement) drawing PDF file. The system will automatically extract equipment data using AI. After extraction, you'll review and edit the data in table format.</p>
             </div>
         </div>
     </div>
@@ -48,7 +46,7 @@
                         <h3 class="mb-0 mt-2">
                             {% set total_components = namespace(count=0) %}
                             {% for equip in equipment %}
-                            {% set total_components.count = total_components.count + (equip.components|length) %}
+                                {% set total_components.count = total_components.count + (equip.components|length) %}
                             {% endfor %}
                             {{ total_components.count }}
                         </h3>
@@ -60,19 +58,18 @@
                 <a href="{{ url_for('works.review_data', work_id=work.id) }}" class="btn btn-success btn-lg px-5">
                     <i class="bi bi-table"></i> Review & Edit Extracted Data
                 </a>
-                <a href="{{ url_for('works.work_history') }}?work_id={{ work.id }}"
-                    class="btn btn-outline-secondary btn-lg ms-2">
+                <a href="{{ url_for('works.work_history') }}?work_id={{ work.id }}" class="btn btn-outline-secondary btn-lg ms-2">
                     <i class="bi bi-clock-history"></i> View History
                 </a>
             </div>
         </div>
     </div>
-
+    
     <!-- Separator -->
     <div class="text-center my-4">
         <span class="badge bg-secondary fs-6 px-4 py-2">OR</span>
     </div>
-
+    
     <!-- Add More Files Section -->
     <div class="text-center mb-3">
         <h5 class="text-muted">
@@ -104,28 +101,24 @@
             </div>
 
             <!-- Upload Form -->
-            <form id="uploadForm" method="POST" enctype="multipart/form-data"
-                action="{{ url_for('works.start_extraction', work_id=work.id) }}">
+            <form id="uploadForm" method="POST" enctype="multipart/form-data" action="{{ url_for('works.start_extraction', work_id=work.id) }}">
                 <!-- Upload Mode Switch -->
                 <div class="mb-2">
                     <label class="form-label fw-bold small">
                         <i class="bi bi-layers"></i> Upload Mode
                     </label>
                     <div class="btn-group w-100" role="group" aria-label="Upload mode">
-                        <input type="radio" class="btn-check" name="uploadMode" id="singleMode" value="single" checked
-                            autocomplete="off">
+                        <input type="radio" class="btn-check" name="uploadMode" id="singleMode" value="single" checked autocomplete="off">
                         <label class="btn btn-sm btn-outline-primary" for="singleMode">
                             <i class="bi bi-file-earmark"></i> Single
                         </label>
-
-                        <input type="radio" class="btn-check" name="uploadMode" id="multipleMode" value="multiple"
-                            autocomplete="off">
+                        
+                        <input type="radio" class="btn-check" name="uploadMode" id="multipleMode" value="multiple" autocomplete="off">
                         <label class="btn btn-sm btn-outline-primary" for="multipleMode">
                             <i class="bi bi-files"></i> Multiple
                         </label>
-
-                        <input type="radio" class="btn-check" name="uploadMode" id="folderMode" value="folder"
-                            autocomplete="off">
+                        
+                        <input type="radio" class="btn-check" name="uploadMode" id="folderMode" value="folder" autocomplete="off">
                         <label class="btn btn-sm btn-outline-primary" for="folderMode">
                             <i class="bi bi-folder2-open"></i> Folder
                         </label>
@@ -136,8 +129,14 @@
                     <label for="pdfFile" class="form-label fw-bold small">
                         <i class="bi bi-file-pdf"></i> <span id="uploadLabel">Select GA Drawing PDF</span>
                     </label>
-                    <input type="file" class="form-control form-control-sm" id="pdfFile" name="file"
-                        accept=".pdf,application/pdf" required>
+                    <input 
+                        type="file" 
+                        class="form-control form-control-sm" 
+                        id="pdfFile" 
+                        name="file" 
+                        accept=".pdf,application/pdf" 
+                        required
+                    >
                     <div class="form-text small">
                         <i class="bi bi-info-circle"></i>
                         <span id="uploadHint">Only PDF files. Max: 50MB</span>
@@ -167,8 +166,7 @@
                     <button type="submit" class="btn btn-primary" id="submitBtn">
                         <i class="bi bi-upload"></i> Start Extraction
                     </button>
-                    <a href="{{ url_for('works.view_work', work_id=work.id) }}"
-                        class="btn btn-sm btn-outline-secondary">
+                    <a href="{{ url_for('works.view_work', work_id=work.id) }}" class="btn btn-sm btn-outline-secondary">
                         <i class="bi bi-arrow-left"></i> Back to Work
                     </a>
                 </div>
@@ -209,8 +207,7 @@
                 </div>
                 <!-- Next Button (appears after completion) -->
                 <div id="nextButtonContainer" class="d-none mt-3 text-end">
-                    <a href="{{ url_for('works.review_data', work_id=work.id) }}"
-                        class="btn btn-primary btn-lg pulse-animation" id="nextToReviewBtn">
+                    <a href="{{ url_for('works.review_data', work_id=work.id) }}" class="btn btn-primary btn-lg pulse-animation" id="nextToReviewBtn">
                         <i class="bi bi-arrow-right-circle"></i> Next: Review & Edit Data
                     </a>
                 </div>
@@ -225,7 +222,7 @@
             <!-- Success Display -->
             <div id="successSection" class="alert alert-success d-none">
                 <i class="bi bi-check-circle-fill me-2"></i>
-                <strong>Extraction completed successfully!</strong>
+                <strong>Extraction completed successfully!</strong> 
                 <span id="equipmentCount">0</span> equipment items with components have been extracted.
             </div>
         </div>
@@ -234,8 +231,7 @@
     <!-- Admin View - No Upload -->
     <div class="alert alert-info">
         <i class="bi bi-info-circle-fill me-2"></i>
-        <strong>Admin View:</strong> You can view extraction status but cannot upload files. Engineers perform
-        extractions.
+        <strong>Admin View:</strong> You can view extraction status but cannot upload files. Engineers perform extractions.
     </div>
     {% endif %}
 
@@ -248,35 +244,33 @@
     .equipment-card {
         transition: transform 0.2s ease, box-shadow 0.2s ease;
     }
-
+    
     .equipment-card:hover {
         transform: translateY(-5px);
-        box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15) !important;
+        box-shadow: 0 8px 16px rgba(0,0,0,0.15) !important;
     }
-
+    
     [data-theme="dark"] .equipment-card {
         background-color: var(--bg-secondary);
     }
-
+    
     /* Pulse animation for Next button */
     @keyframes pulse {
         0% {
             box-shadow: 0 0 0 0 rgba(13, 110, 253, 0.7);
         }
-
         70% {
             box-shadow: 0 0 0 10px rgba(13, 110, 253, 0);
         }
-
         100% {
             box-shadow: 0 0 0 0 rgba(13, 110, 253, 0);
         }
     }
-
+    
     .pulse-animation {
         animation: pulse 2s infinite;
     }
-
+    
     /* Terminal-style log viewer */
     .extraction-terminal {
         background-color: #1e1e1e;
@@ -287,9 +281,9 @@
         border-radius: 8px;
         height: 400px;
         overflow-y: auto;
-        box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.3);
+        box-shadow: inset 0 0 10px rgba(0,0,0,0.3);
     }
-
+    
     /* Files list preview */
     #filesList {
         max-height: 200px;
@@ -297,67 +291,67 @@
         border: 1px solid #dee2e6;
         border-radius: 4px;
     }
-
+    
     #filesList .list-group-item {
         border: none;
         border-bottom: 1px solid #dee2e6;
     }
-
+    
     #filesList .list-group-item:last-child {
         border-bottom: none;
     }
-
+    
     #filesList::-webkit-scrollbar {
         width: 6px;
     }
-
+    
     #filesList::-webkit-scrollbar-track {
         background: #f1f1f1;
     }
-
+    
     #filesList::-webkit-scrollbar-thumb {
         background: #888;
         border-radius: 3px;
     }
-
+    
     #filesList::-webkit-scrollbar-thumb:hover {
         background: #555;
     }
-
+    
     [data-theme="dark"] .extraction-terminal {
         background-color: #0d1117;
         border: 1px solid #30363d;
     }
-
+    
     .log-entry {
         margin-bottom: 4px;
         line-height: 1.5;
         word-wrap: break-word;
     }
-
+    
     .log-entry i {
         margin-right: 5px;
     }
-
+    
     .log-timestamp {
         color: #858585;
         margin-right: 8px;
     }
-
+    
     /* Scrollbar styling for terminal */
     .extraction-terminal::-webkit-scrollbar {
         width: 8px;
     }
-
+    
     .extraction-terminal::-webkit-scrollbar-track {
         background: #2d2d2d;
     }
-
+    
     .extraction-terminal::-webkit-scrollbar-thumb {
         background: #555;
         border-radius: 4px;
     }
-
+    
     .extraction-terminal::-webkit-scrollbar-thumb:hover {
         background: #666;
     }
@@ -366,99 +360,94 @@
 
 {% block extra_js %}
 <script>
-    let extractionId = null;
-    let pollInterval = null;
-    let allExtractionIds = [];
-    let extractionProgressMap = {};
-    let fakeProgressIntervals = {};
+let extractionId = null;
+let pollInterval = null;
+let allExtractionIds = [];  // Track all extraction IDs for multi-file uploads
+let extractionProgressMap = {};  // Track progress for each extraction
 
-    // Load masterfile status on page load
-    document.addEventListener('DOMContentLoaded', function () {
-        fetchMasterfileStatus();
-    });
-
-    // ============================================================================
-    // ✅ PARALLEL MULTI-FILE HANDLER
-    // ============================================================================
-    async function handleMultiFileUpload(files) {
-        const submitBtn = document.getElementById('submitBtn');
-        const uploadForm = document.getElementById('uploadForm');
-
-        submitBtn.disabled = true;
-        submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Uploading...';
-
-        document.getElementById('extractionProgress').style.display = 'block';
-        document.getElementById('extractionProgress').scrollIntoView({ behavior: 'smooth' });
-
-        addLog(`Starting upload of ${files.length} files in parallel...`, 'info');
-
-        try {
-            // Step 1: Upload ALL files in parallel (not sequential!)
-            addLog(`Uploading ${files.length} files to server...`, 'processing');
-
-            const uploadPromises = Array.from(files).map(file => {
+// Load masterfile status on page load
+document.addEventListener('DOMContentLoaded', function() {
+    fetchMasterfileStatus();
+    
+    // Handle form submission for multiple files
+    const uploadForm = document.getElementById('uploadForm');
+    uploadForm.addEventListener('submit', async function(e) {
+        const fileInput = document.getElementById('pdfFile');
+        const files = fileInput.files;
+        
+        // If multiple files selected, process them sequentially
+        if (files.length > 1) {
+            e.preventDefault();
+            
+            // Reset tracking for new multi-file extraction
+            allExtractionIds = [];
+            extractionProgressMap = {};
+            window.isMultiFileProcessing = true;
+            
+            addLog(`Processing ${files.length} files...`, 'info');
+            document.getElementById('extractionProgress').style.display = 'block';
+            document.getElementById('submitBtn').disabled = true;
+            
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                addLog(`[${i + 1}/${files.length}] Uploading: ${file.name}`, 'processing');
+                
+                // Create FormData for this specific file
                 const formData = new FormData();
                 formData.append('file', file);
-
-                return fetch(uploadForm.action, {
-                    method: 'POST',
-                    body: formData
-                })
-                    .then(response => {
-                        if (!response.ok) {
-                            return response.json().catch(err => ({ error: `HTTP ${response.status}` }))
-                                .then(data => { throw new Error(data.error || 'Upload failed'); });
-                        }
-                        return response.json();
-                    })
-                    .then(data => {
-                        if (data.extraction_id) {
-                            addLog(`✓ Uploaded: ${file.name} (extraction ${data.extraction_id})`, 'success');
-                            return { file: file.name, id: data.extraction_id };
-                        } else {
-                            throw new Error(data.message || 'No extraction ID returned');
-                        }
-                    })
-                    .catch(error => {
-                        addLog(`✗ Failed to upload ${file.name}: ${error.message}`, 'error');
-                        throw error;
+                
+                try {
+                    const response = await fetch(uploadForm.action, {
+                        method: 'POST',
+                        body: formData
                     });
-            });
-
-            // Wait for ALL uploads to complete in parallel
-            const uploadResults = await Promise.all(uploadPromises);
-
-            if (uploadResults.length === 0) {
-                throw new Error('No files uploaded successfully');
+                    
+                    const data = await response.json();
+                    
+                    if (data.extraction_id) {
+                        addLog(`[${i + 1}/${files.length}] Started extraction for ${file.name} (ID: ${data.extraction_id})`, 'success');
+                        extractionId = data.extraction_id;
+                        
+                        // Add to tracking list for cumulative progress
+                        allExtractionIds.push(data.extraction_id);
+                        extractionProgressMap[data.extraction_id] = {
+                            total_pages: 0,
+                            processed_pages: 0,
+                            status: 'pending'
+                        };
+                        
+                        // Poll this extraction until complete
+                        const success = await pollExtractionUntilComplete(data.extraction_id, file.name);
+                        if (success) {
+                            addLog(`[${i + 1}/${files.length}] ✓ Processing complete for ${file.name}`, 'success');
+                        } else {
+                            addLog(`[${i + 1}/${files.length}] ✗ Processing failed for ${file.name}`, 'error');
+                        }
+                    } else {
+                        addLog(`[${i + 1}/${files.length}] Failed to start: ${file.name} - ${data.message || 'Unknown error'}`, 'error');
+                    }
+                } catch (error) {
+                    addLog(`[${i + 1}/${files.length}] Error uploading ${file.name}: ${error.message}`, 'error');
+                }
             }
-
-            const extractionIds = uploadResults.map(r => r.id);
-            allExtractionIds = extractionIds;
-
-            addLog(`✓ All ${extractionIds.length} files uploaded! Starting extractions...`, 'success');
-
-            // Step 2: Poll ALL extractions in parallel
-            const pollPromises = uploadResults.map(result =>
-                pollExtractionUntilComplete(result.id, result.file)
-            );
-
-            // Wait for all to complete
-            const results = await Promise.all(pollPromises);
-
-            const successCount = results.filter(r => r === true).length;
-            const failedCount = results.filter(r => r === false).length;
-
-            addLog(`✓ All extractions complete: ${successCount} succeeded, ${failedCount} failed`, 'success');
-
-            // Update UI
+            
+            addLog('All files processed!', 'success');
+            document.getElementById('submitBtn').disabled = false;
+            
+            // Clear multi-file processing flag and stop shared progress
+            window.isMultiFileProcessing = false;
+            isMultiFileExtraction = false;
+            
+            // Update status badge to completed now that all files are done
             const statusBadge = document.getElementById('statusBadge');
             if (statusBadge) {
                 statusBadge.className = 'badge fs-6 bg-success';
                 statusBadge.innerHTML = '<i class="bi bi-check-circle-fill me-2"></i> COMPLETED';
             }
-
-            const progressBar = document.getElementById('fakeProgressBar');
-            const progressText = document.getElementById('fakeProgressText');
+            
+            // Set progress to 100% on completion
+            const progressBar = document.getElementById('progressBar');
+            const progressText = document.getElementById('progressText');
             if (progressBar) {
                 progressBar.style.width = '100%';
                 progressBar.setAttribute('aria-valuenow', 100);
@@ -467,107 +456,137 @@
             if (progressText) {
                 progressText.textContent = '100%';
             }
-
+            
+            // Show success section
             const successSection = document.getElementById('successSection');
             if (successSection) {
                 successSection.classList.remove('d-none');
             }
-
+            
+            // Show next button after all files
             const nextButtonContainer = document.getElementById('nextButtonContainer');
             if (nextButtonContainer) {
                 nextButtonContainer.classList.remove('d-none');
             }
-
-            addLog('All files processed! Click Next to review the data.', 'info');
-
-        } catch (error) {
-            addLog(`✗ Error: ${error.message}`, 'error');
-
-            const errorSection = document.getElementById('errorSection');
-            const errorText = document.getElementById('errorText');
-            if (errorSection && errorText) {
-                errorSection.classList.remove('d-none');
-                errorText.textContent = error.message;
-            }
-
-        } finally {
-            submitBtn.disabled = false;
-            submitBtn.innerHTML = '<i class="bi bi-upload"></i> Start Extraction';
+            
+            // Fake progress code removed - no need to stop
+            
+            addLog('All extractions completed! Click Next to review the data.', 'info');
+            
+            // IMPORTANT: Return here to prevent form from submitting normally
+            return;
         }
-    }
+        // For single file, let the form submit normally
+    });
+});
 
-    // ============================================================================
-    // Poll extraction until complete (works for both single and multi-file)
-    // ============================================================================
-    async function pollExtractionUntilComplete(extractionId, fileName) {
-        return new Promise((resolve) => {
-            let pollCount = 0;
-            const maxPolls = 300;
-            let completionLogged = false;
-
-            const checkInterval = setInterval(async () => {
-                pollCount++;
-
-                if (pollCount > maxPolls) {
-                    clearInterval(checkInterval);
-                    addLog(`✗ Timeout: ${fileName}`, 'error');
-                    resolve(false);
-                    return;
+// Minimal placeholder functions (fake progress removed for performance)
+// Poll extraction until complete (for multiple files)
+// Simplified and optimized - minimal DOM operations
+async function pollExtractionUntilComplete(extractionId, fileName) {
+    return new Promise((resolve) => {
+        let pollCount = 0;
+        const maxPolls = 300;
+        let completionLogged = false;
+        
+        // Polling interval for both single and multi-file: 20 seconds for deployed backend stability
+        const pollInterval = 20000;
+        
+        const checkInterval = setInterval(async () => {
+            pollCount++;
+            
+            // Timeout after max polls
+            if (pollCount > maxPolls) {
+                clearInterval(checkInterval);
+                addLog(`✗ Timeout: ${fileName} (exceeded 10 minutes)`, 'error');
+                resolve(false);
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/works/extraction/${extractionId}/status`);
+                
+                if (!response.ok) {
+                    // 502 errors are temporary backend overload - don't fail, just skip this poll
+                    if (response.status === 502) {
+                        console.warn(`Backend overloaded (502) for ${fileName}, will retry next poll...`);
+                        // addLog(`⚠ Backend busy (502) - retrying ${fileName}...`, 'warning');
+                        return; // Continue polling without counting as error
+                    }
+                    throw new Error(`HTTP ${response.status}`);
                 }
-
+                
+                let data;
                 try {
-                    const response = await fetch(`/works/extraction/${extractionId}/status`);
-
-                    if (!response.ok) {
-                        if (response.status === 502) {
-                            console.warn(`502 Backend overload for ${fileName}, retrying...`);
-                            return;
-                        }
-                        throw new Error(`HTTP ${response.status}`);
-                    }
-
-                    const data = await response.json();
-                    const status = (data.status || 'pending').toLowerCase();
-
-                    // Store progress
-                    extractionProgressMap[extractionId] = {
-                        total_pages: data.total_pages || 0,
-                        processed_pages: data.processed_pages || 0,
-                        status: status
-                    };
-
-                    if (status === 'completed' || status === 'success') {
-                        clearInterval(checkInterval);
-
-                        if (!completionLogged) {
-                            addLog(`✓ Completed: ${fileName}`, 'success');
-                            completionLogged = true;
-                        }
-                        resolve(true);
-
-                    } else if (status === 'failed' || status === 'error') {
-                        clearInterval(checkInterval);
-                        addLog(`✗ Failed: ${fileName} - ${data.error_message || 'Unknown error'}`, 'error');
-                        resolve(false);
-                    }
-                } catch (error) {
-                    clearInterval(checkInterval);
-                    addLog(`✗ Error polling ${fileName}: ${error.message}`, 'error');
-                    resolve(false);
+                    data = await response.json();
+                } catch (parseError) {
+                    console.warn(`Failed to parse JSON response for ${fileName}, backend may be overloaded`);
+                    return; // Continue polling without failing
                 }
-            }, 2000); // Poll every 2 seconds
-        });
-    }
+                
+                const status = (data.status || 'pending').toLowerCase();
+                
+                // Store progress for multi-file aggregation (minimal operations)
+                extractionProgressMap[extractionId] = {
+                    total_pages: data.total_pages || 0,
+                    processed_pages: data.processed_pages || 0,
+                    status: status
+                };
+                
+                // Check completion - that's the main thing we care about
+                if (status === 'completed' || status === 'success') {
+                    clearInterval(checkInterval);
+                    
+                    // Only log once
+                    if (!completionLogged) {
+                        addLog(`✓ Completed: ${fileName} (${data.equipment_count || 0} equipment)`, 'success');
+                        completionLogged = true;
+                        
+                        // Log extraction completion activity
+                        fetch('{{ url_for('works.log_extraction_completion') }}', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                work_id: {{ work.id }},
+                                extraction_id: extractionId,
+                                equipment_count: data.equipment_count || 0
+                            })
+                        }).catch(err => console.error('Failed to log extraction activity:', err));
+                    }
+                    resolve(true);
+                } else if (status === 'failed' || status === 'error') {
+                    clearInterval(checkInterval);
+                    addLog(`✗ Failed: ${fileName} - ${data.error_message || data.message || 'Unknown error'}`, 'error');
+                    resolve(false);
+                } else if (status === 'pending' || status === 'in_progress' || status === 'processing') {
+                    // Continue polling
+                    console.log(`${fileName} status: ${status}`);
+                } else {
+                    // Unknown status
+                    console.warn(`Unknown status for ${fileName}: ${status}`);
+                }
+            } catch (error) {
+                clearInterval(checkInterval);
+                addLog(`✗ Error polling ${fileName}: ${error.message}`, 'error');
+                console.error('Polling error:', error);
+                resolve(false);
+            }
+        }, pollInterval);
+    });
+}
 
-    // Fetch masterfile status
-    function fetchMasterfileStatus() {
-        fetch('{{ url_for("works.get_masterfile_status", work_id=work.id) }}')
-            .then(response => response.json())
-            .then(data => {
-                const statusDiv = document.getElementById('masterfileStatus');
-
-                if (data.has_masterfile) {
-                    statusDiv.innerHTML = `
+// Fetch masterfile status from backend
+function fetchMasterfileStatus() {
+    fetch('{{ url_for("works.get_masterfile_status", work_id=work.id) }}')
+        .then(response => response.json())
+        .then(data => {
+            console.log('Masterfile status:', data); // Debug log
+            const statusDiv = document.getElementById('masterfileStatus');
+            
+            if (data.has_masterfile) {
+                statusDiv.innerHTML = `
                     <div class="d-flex align-items-center justify-content-between">
                         <div>
                             <span class="badge bg-success me-2">
@@ -578,54 +597,73 @@
                         <small class="text-muted">Uploaded by ${data.uploaded_by || 'Admin'}</small>
                     </div>
                 `;
-                } else {
-                    statusDiv.innerHTML = `
+                
+                // Debug: Show sources if available
+                if (data.sources) {
+                    const sources = [];
+                    if (data.sources.global_template) sources.push('Global Template');
+                    if (data.sources.work_specific) sources.push('Work Specific');
+                    if (data.sources.database) sources.push('Database');
+                    
+                    if (sources.length > 0) {
+                        console.log('Masterfile sources:', sources.join(', '));
+                    }
+                }
+            } else {
+                statusDiv.innerHTML = `
                     <div class="text-warning">
                         <i class="bi bi-exclamation-triangle me-2"></i>
-                        <strong>No masterfile uploaded yet.</strong>
+                        <strong>No masterfile uploaded yet.</strong> Please contact an administrator to upload the Excel masterfile.
                     </div>
                 `;
-
-                    const submitBtn = document.getElementById('submitBtn');
-                    const fileInput = document.getElementById('pdfFile');
-                    const confirmCheckbox = document.getElementById('confirmUpload');
-
-                    if (submitBtn) {
-                        submitBtn.disabled = true;
-                        submitBtn.innerHTML = '<i class="bi bi-exclamation-circle"></i> Masterfile Required';
-                    }
-                    if (fileInput) fileInput.disabled = true;
-                    if (confirmCheckbox) confirmCheckbox.disabled = true;
+                
+                // Disable upload if no masterfile
+                const submitBtn = document.getElementById('submitBtn');
+                const fileInput = document.getElementById('pdfFile');
+                const confirmCheckbox = document.getElementById('confirmUpload');
+                
+                if (submitBtn) {
+                    submitBtn.disabled = true;
+                    submitBtn.innerHTML = '<i class="bi bi-exclamation-circle"></i> Masterfile Required';
                 }
-            })
-            .catch(error => {
-                console.error('Error fetching masterfile status:', error);
-                document.getElementById('masterfileStatus').innerHTML = `
+                if (fileInput) {
+                    fileInput.disabled = true;
+                }
+                if (confirmCheckbox) {
+                    confirmCheckbox.disabled = true;
+                }
+                
+                console.log('No masterfile found. Sources checked:', data.sources);
+            }
+        })
+        .catch(error => {
+            console.error('Error fetching masterfile status:', error);
+            document.getElementById('masterfileStatus').innerHTML = `
                 <div class="text-danger">
                     <i class="bi bi-x-circle me-2"></i>
                     Error loading masterfile status
                 </div>
             `;
-            });
-    }
+        });
+}
 
-    // Update file preview
-    document.getElementById('pdfFile').addEventListener('change', function (e) {
-        const files = e.target.files;
-        const preview = document.getElementById('filePreview');
-        const filesList = document.getElementById('filesList');
-        const fileCount = document.getElementById('fileCount');
-
-        if (files.length > 0) {
-            filesList.innerHTML = '';
-            fileCount.textContent = files.length;
-
-            Array.from(files).forEach((file) => {
-                const fileSizeMB = (file.size / 1024 / 1024).toFixed(2);
-
-                const fileItem = document.createElement('div');
-                fileItem.className = 'list-group-item list-group-item-action py-2 px-3';
-                fileItem.innerHTML = `
+// Update file preview when file is selected
+document.getElementById('pdfFile').addEventListener('change', function(e) {
+    const files = e.target.files;
+    const preview = document.getElementById('filePreview');
+    const filesList = document.getElementById('filesList');
+    const fileCount = document.getElementById('fileCount');
+    
+    if (files.length > 0) {
+        filesList.innerHTML = '';
+        fileCount.textContent = files.length;
+        
+        Array.from(files).forEach((file, index) => {
+            const fileSizeMB = (file.size / 1024 / 1024).toFixed(2);
+            
+            const fileItem = document.createElement('div');
+            fileItem.className = 'list-group-item list-group-item-action py-2 px-3';
+            fileItem.innerHTML = `
                 <div class="d-flex align-items-center">
                     <i class="bi bi-file-pdf text-danger fs-5 me-2"></i>
                     <div class="flex-grow-1">
@@ -635,247 +673,469 @@
                     <span class="badge bg-success">Ready</span>
                 </div>
             `;
-                filesList.appendChild(fileItem);
-            });
-
-            preview.classList.remove('d-none');
-        } else {
-            preview.classList.add('d-none');
-        }
-    });
-
-    // Handle upload mode switching
-    document.querySelectorAll('input[name="uploadMode"]').forEach(radio => {
-        radio.addEventListener('change', function () {
-            const fileInput = document.getElementById('pdfFile');
-            const uploadLabel = document.getElementById('uploadLabel');
-            const uploadHint = document.getElementById('uploadHint');
-
-            if (this.value === 'single') {
-                fileInput.removeAttribute('multiple');
-                fileInput.removeAttribute('webkitdirectory');
-                uploadLabel.textContent = 'Select GA Drawing PDF';
-                uploadHint.textContent = 'Only PDF files. Max: 50MB';
-            } else if (this.value === 'multiple') {
-                fileInput.setAttribute('multiple', 'multiple');
-                fileInput.removeAttribute('webkitdirectory');
-                uploadLabel.textContent = 'Select Multiple PDFs';
-                uploadHint.textContent = 'Multiple PDFs. Max 10 files, 50MB each';
-            } else if (this.value === 'folder') {
-                fileInput.removeAttribute('multiple');
-                fileInput.setAttribute('webkitdirectory', 'webkitdirectory');
-                uploadLabel.textContent = 'Select Folder with PDFs';
-                uploadHint.textContent = 'Folder with PDFs. All files processed';
-            }
-
-            fileInput.value = '';
-            document.getElementById('filePreview').classList.add('d-none');
+            filesList.appendChild(fileItem);
         });
-    });
+        
+        preview.classList.remove('d-none');
+    } else {
+        preview.classList.add('d-none');
+    }
+});
 
-    // Add log entry
-    function addLog(message, type = 'info') {
-        const logContainer = document.getElementById('extractionLog');
-        const timestamp = new Date().toLocaleTimeString();
-
-        let colorClass = 'text-info';
-        let icon = 'bi-info-circle';
-
-        if (type === 'success') {
-            colorClass = 'text-success';
-            icon = 'bi-check-circle';
-        } else if (type === 'error') {
-            colorClass = 'text-danger';
-            icon = 'bi-x-circle';
-        } else if (type === 'processing') {
-            colorClass = 'text-primary';
-            icon = 'bi-gear';
+// Handle upload mode switching
+document.querySelectorAll('input[name="uploadMode"]').forEach(radio => {
+    radio.addEventListener('change', function() {
+        const fileInput = document.getElementById('pdfFile');
+        const uploadLabel = document.getElementById('uploadLabel');
+        const uploadHint = document.getElementById('uploadHint');
+        
+        if (this.value === 'single') {
+            fileInput.removeAttribute('multiple');
+            fileInput.removeAttribute('webkitdirectory');
+            fileInput.accept = '.pdf,application/pdf';
+            uploadLabel.textContent = 'Select GA Drawing PDF';
+            uploadHint.textContent = 'Only PDF files. Max: 50MB';
+        } else if (this.value === 'multiple') {
+            fileInput.setAttribute('multiple', 'multiple');
+            fileInput.removeAttribute('webkitdirectory');
+            fileInput.accept = '.pdf,application/pdf';
+            uploadLabel.textContent = 'Select Multiple PDFs';
+            uploadHint.textContent = 'Multiple PDFs. Max 10 files, 50MB each';
+        } else if (this.value === 'folder') {
+            fileInput.removeAttribute('multiple');
+            fileInput.setAttribute('webkitdirectory', 'webkitdirectory');
+            fileInput.accept = '.pdf,application/pdf';
+            uploadLabel.textContent = 'Select Folder with PDFs';
+            uploadHint.textContent = 'Folder with PDFs. All files processed';
         }
+        
+        // Clear selected files when mode changes
+        fileInput.value = '';
+        document.getElementById('filePreview').classList.add('d-none');
+    });
+});
 
-        const logEntry = document.createElement('div');
-        logEntry.className = `log-entry ${colorClass}`;
-        logEntry.innerHTML = `<span class="log-timestamp">[${timestamp}]</span><i class="bi ${icon}"></i> ${message}`;
-
-        logContainer.appendChild(logEntry);
-        logContainer.scrollTop = logContainer.scrollHeight;
+// Add log entry to terminal
+function addLog(message, type = 'info') {
+    const logContainer = document.getElementById('extractionLog');
+    const timestamp = new Date().toLocaleTimeString();
+    
+    let colorClass = 'text-info';
+    let icon = 'bi-info-circle';
+    
+    if (type === 'success') {
+        colorClass = 'text-success';
+        icon = 'bi-check-circle';
+    } else if (type === 'error') {
+        colorClass = 'text-danger';
+        icon = 'bi-x-circle';
+    } else if (type === 'warning') {
+        colorClass = 'text-warning';
+        icon = 'bi-exclamation-triangle';
+    } else if (type === 'processing') {
+        colorClass = 'text-primary';
+        icon = 'bi-gear';
     }
-
-    // Clear log
-    function clearLog() {
-        const logContainer = document.getElementById('extractionLog');
-        logContainer.innerHTML = '<div class="log-entry text-success"><i class="bi bi-chevron-right"></i> Log cleared.</div>';
+    
+    const logEntry = document.createElement('div');
+    logEntry.className = `log-entry ${colorClass}`;
+    logEntry.innerHTML = `<span class="log-timestamp">[${timestamp}]</span><i class="bi ${icon}"></i> ${message}`;
+    
+    logContainer.appendChild(logEntry);
+    logContainer.scrollTop = logContainer.scrollHeight;
+    
+    // ===== ADVANCE PROGRESS BAR WITH EACH LOG =====
+    // Skip certain logs that shouldn't advance progress
+    const skipLogsKeywords = ['Completed', 'Click Next', 'All extractions', 'All files'];
+    const shouldSkip = skipLogsKeywords.some(keyword => message.includes(keyword));
+    
+    if (!shouldSkip) {
+        const progressBar = document.getElementById('progressBar');
+        const progressText = document.getElementById('progressText');
+        
+        if (progressBar) {
+            // Get current progress
+            let currentProgress = parseFloat(progressBar.getAttribute('aria-valuenow')) || 0;
+            
+            // Increment by 3-5% per log (random to look natural)
+            const increment = 2 + Math.random() * 3; // 2-5% per log
+            let newProgress = Math.min(currentProgress + increment, 95); // Cap at 95% until actual completion
+            
+            // Update progress bar
+            progressBar.style.width = newProgress + '%';
+            progressBar.setAttribute('aria-valuenow', Math.round(newProgress));
+            
+            if (progressText) {
+                progressText.textContent = Math.round(newProgress) + '%';
+            }
+        }
     }
+}
 
-    // Poll for single file extraction
-    function pollStatus() {
-        if (!extractionId) return;
+// Clear log
+function clearLog() {
+    const logContainer = document.getElementById('extractionLog');
+    logContainer.innerHTML = '<div class="log-entry text-success"><i class="bi bi-chevron-right"></i> Log cleared.</div>';
+}
 
-        fetch(`/works/extraction/${extractionId}/status`)
-            .then(response => {
-                if (!response.ok) throw new Error(`HTTP ${response.status}`);
-                return response.json();
-            })
-            .then(data => {
-                const status = (data.status || 'pending').toLowerCase();
-
-                const statusBadge = document.getElementById('statusBadge');
-                const progressBar = document.getElementById('fakeProgressBar');
-                const progressText = document.getElementById('fakeProgressText');
-
-                const percentage = data.total_pages > 0
-                    ? Math.round((data.processed_pages / data.total_pages) * 100)
-                    : 0;
-
-                if (progressBar) {
-                    progressBar.style.width = percentage + '%';
-                    progressBar.setAttribute('aria-valuenow', percentage);
-                }
-                if (progressText) {
-                    progressText.textContent = percentage + '%';
-                }
-
-                if (status === 'completed') {
-                    clearInterval(pollInterval);
-
-                    if (statusBadge) {
-                        statusBadge.className = 'badge fs-6 bg-success';
-                        statusBadge.innerHTML = '<i class="bi bi-check-circle-fill me-2"></i> COMPLETED';
-                    }
-
-                    if (progressBar) {
-                        progressBar.style.width = '100%';
-                        progressBar.classList.remove('progress-bar-animated');
-                    }
-                    if (progressText) progressText.textContent = '100%';
-
-                    const successSection = document.getElementById('successSection');
-                    if (successSection) successSection.classList.remove('d-none');
-
-                    const nextButtonContainer = document.getElementById('nextButtonContainer');
-                    if (nextButtonContainer) nextButtonContainer.classList.remove('d-none');
-
-                    addLog(`✓ Extraction completed!`, 'success');
-
-                } else if (status === 'failed') {
-                    clearInterval(pollInterval);
-
-                    if (statusBadge) {
-                        statusBadge.className = 'badge fs-6 bg-danger';
-                        statusBadge.innerHTML = '<i class="bi bi-x-circle-fill me-2"></i> FAILED';
-                    }
-
-                    const errorSection = document.getElementById('errorSection');
-                    const errorText = document.getElementById('errorText');
-                    if (errorSection) {
-                        errorSection.classList.remove('d-none');
-                        if (errorText) errorText.textContent = data.error_message || 'Unknown error';
-                    }
-
-                    addLog(`✗ Extraction failed`, 'error');
-                }
-            })
-            .catch(error => {
-                console.error('Poll error:', error);
-            });
+// Update progress
+function updateProgress(data) {
+    const status = data.status?.toLowerCase() || 'pending';
+    const totalPages = data.total_pages || 0;
+    const processedPages = data.processed_pages || 0;
+    const percentage = data.progress_percent || (totalPages > 0 ? Math.round((processedPages / totalPages) * 100) : 0);
+    
+    console.log('Update progress:', { status, totalPages, processedPages, percentage, data }); // Debug log
+    
+    // Keep status badge showing only loading circle - don't update it here
+    // It will only change to completed when all files are done
+    const statusColors = {
+        'pending': 'bg-secondary',
+        'converting': 'bg-warning',
+        'processing': 'bg-primary',
+        'in_progress': 'bg-primary',
+        'completed': 'bg-success',
+        'failed': 'bg-danger'
+    };
+    
+    const fakeProgressBar = document.getElementById('fakeProgressBar');
+    const fakeProgressText = document.getElementById('fakeProgressText');
+    const pagesProcessed = document.getElementById('pagesProcessed');
+    const totalPagesEl = document.getElementById('totalPages');
+    
+    // Update fake progress bar
+    if (fakeProgressBar) {
+        fakeProgressBar.style.width = percentage + '%';
+        fakeProgressBar.setAttribute('aria-valuenow', percentage);
+        
+        // Keep animation running if still processing (for multi-file)
+        if (status === 'in_progress' || status === 'processing' || status === 'pending') {
+            if (!fakeProgressBar.classList.contains('progress-bar-animated')) {
+                fakeProgressBar.classList.add('progress-bar-animated');
+            }
+        }
     }
-
-    // Main form submission handler
-    document.getElementById('uploadForm').addEventListener('submit', function (e) {
-        e.preventDefault();
-
-        window.extractionCompleted = false;
-        window.extractionFailed = false;
-
+    
+    if (fakeProgressText) {
+        fakeProgressText.textContent = Math.round(percentage) + '%';
+    }
+    
+    // Pages container is hidden as per user request
+    const pagesContainer = document.getElementById('pagesContainer');
+    if (pagesContainer) {
+        pagesContainer.style.display = 'none';
+    }
+    
+    // Log progress updates (not on every poll, only when progress changes)
+    if (status === 'converting') {
+        addLog('Converting PDF pages to images...', 'processing');
+    } else if ((status === 'processing' || status === 'in_progress') && processedPages > 0 && totalPages > 0) {
+        // Only log when we have actual progress
+        if (!window.lastLoggedProgress || window.lastLoggedProgress !== `${processedPages}/${totalPages}`) {
+            addLog(`Processing page ${processedPages} of ${totalPages}...`, 'processing');
+            window.lastLoggedProgress = `${processedPages}/${totalPages}`;
+        }
+    }
+    
+    // Handle completion
+    if (status === 'completed') {
+        // Stop polling immediately
         if (pollInterval) {
             clearInterval(pollInterval);
             pollInterval = null;
         }
-
-        const fileInput = document.getElementById('pdfFile');
-        const submitBtn = document.getElementById('submitBtn');
-        const files = fileInput.files;
-
-        if (files.length === 0) {
-            alert('Please select a PDF file');
-            return;
+        
+        // Skip UI updates during multi-file processing
+        if (window.isMultiFileProcessing) {
+            return; // Let the multi-file handler manage completion
         }
-
-        // Check file sizes
-        for (let file of files) {
-            if (file.size > 52428800) {
-                alert(`File ${file.name} exceeds 50MB limit`);
-                return;
-            }
-            if (!file.name.toLowerCase().endsWith('.pdf')) {
-                alert(`File ${file.name} is not a PDF`);
-                return;
-            }
+        
+        // Prevent duplicate completion messages
+        if (window.extractionCompleted) {
+            return; // Already processed completion
         }
-
-        document.getElementById('extractionProgress').style.display = 'block';
-        document.getElementById('extractionProgress').scrollIntoView({ behavior: 'smooth' });
-
-        // ✅ HANDLE MULTI-FILE IN PARALLEL
-        if (files.length > 1) {
-            handleMultiFileUpload(files);
-            return;
-        }
-
-        // Single file - use existing logic
-        const file = files[0];
-
-        addLog(`Starting extraction...`, 'info');
-        addLog(`File: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`, 'info');
-
-        submitBtn.disabled = true;
-        submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Uploading...';
-
-        const formData = new FormData(this);
-
-        fetch(this.action, {
+        window.extractionCompleted = true;
+        
+        // Log extraction completion activity
+        fetch('{{ url_for('works.log_extraction_completion') }}', {
             method: 'POST',
-            body: formData
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                work_id: {{ work.id }},
+                extraction_id: extractionId,
+                equipment_count: data.equipment_count || 0
+            })
+        }).catch(err => console.error('Failed to log extraction activity:', err));
+        
+        // Status badge already shows loading circle, will be hidden/updated only on full completion
+        
+        const fakeProgressBar = document.getElementById('fakeProgressBar');
+        if (fakeProgressBar) {
+            fakeProgressBar.style.width = '100%';
+            fakeProgressBar.setAttribute('aria-valuenow', 100);
+            fakeProgressBar.classList.remove('progress-bar-animated');
+        }
+        
+        const fakeProgressText = document.getElementById('fakeProgressText');
+        if (fakeProgressText) {
+            fakeProgressText.textContent = '100%';
+        }
+        
+        const successSection = document.getElementById('successSection');
+        const equipmentCount = document.getElementById('equipmentCount');
+        const nextButtonContainer = document.getElementById('nextButtonContainer');
+        
+        if (successSection) {
+            successSection.classList.remove('d-none');
+        }
+        
+        if (equipmentCount) {
+            equipmentCount.textContent = data.equipment_count || 0;
+        }
+        
+        // Show Next button for single file extraction
+        if (nextButtonContainer) {
+            nextButtonContainer.classList.remove('d-none');
+            addLog(`✓ Extraction completed! ${data.equipment_count || 0} equipment items extracted.`, 'success');
+            addLog('Click the Next button to review and edit component data.', 'info');
+        }
+    }
+    
+    // Handle failure
+    if (status === 'failed') {
+        // Stop polling immediately
+        if (pollInterval) {
+            clearInterval(pollInterval);
+            pollInterval = null;
+        }
+        
+        // Stop fake progress
+        
+        // Prevent duplicate failure messages
+        if (window.extractionFailed) {
+            return; // Already processed failure
+        }
+        window.extractionFailed = true;
+        
+        if (statusBadge) {
+            statusBadge.innerHTML = '<i class="bi bi-x-circle-fill me-2"></i> FAILED';
+        }
+        
+        if (progressBar) {
+            progressBar.classList.remove('progress-bar-animated');
+            progressBar.classList.add('bg-danger');
+        }
+        
+        const errorSection = document.getElementById('errorSection');
+        const errorText = document.getElementById('errorText');
+        
+        if (errorSection) {
+            errorSection.classList.remove('d-none');
+        }
+        
+        if (errorText) {
+            errorText.textContent = data.error_message || 'Unknown error occurred';
+        }
+        
+        addLog('✗ Extraction failed: ' + (data.error_message || 'Unknown error'), 'error');
+    }
+}
+
+// Poll for extraction status
+function pollStatus() {
+    if (!extractionId) {
+        console.error('No extraction ID set');
+        return;
+    }
+    
+    const statusUrl = '/works/extraction/' + extractionId + '/status';
+    console.log('Polling status from:', statusUrl);
+    
+    fetch(statusUrl)
+        .then(response => {
+            console.log('Status response:', response.status, response.statusText);
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            return response.json();
         })
-            .then(response => {
-                if (!response.ok) {
-                    return response.json().catch(err => ({ error: `HTTP ${response.status}` }))
-                        .then(data => { throw new Error(data.error || 'Upload failed'); });
-                }
-                return response.json();
-            })
-            .then(data => {
-                if (data.extraction_id) {
-                    extractionId = data.extraction_id;
-
-                    addLog(`✓ PDF uploaded. Extraction ID: ${extractionId}`, 'success');
-                    addLog(`Starting AI extraction...`, 'processing');
-
-                    pollStatus();
-                    pollInterval = setInterval(pollStatus, 2000);
-                } else {
-                    throw new Error(data.error || 'Unknown error');
-                }
-            })
-            .catch(error => {
-                addLog(`✗ Upload error: ${error.message}`, 'error');
-
+        .then(data => {
+            console.log('Status data received:', data);
+            
+            // Check if we got an error response
+            if (data.error) {
+                throw new Error(data.error);
+            }
+            
+            // Reset error count on successful response
+            window.pollErrorCount = 0;
+            
+            // ALWAYS update progress, even if data seems unchanged
+            updateProgress(data);
+        })
+        .catch(error => {
+            console.error('Error polling status:', error);
+            
+            // Only log actual errors, not null element issues
+            if (error.message && !error.message.includes('null')) {
+                addLog('Error fetching extraction status: ' + error.message, 'error');
+            }
+            
+            // Don't stop polling on first error, might be temporary
+            // But stop if we get too many consecutive errors
+            if (!window.pollErrorCount) window.pollErrorCount = 0;
+            window.pollErrorCount++;
+            
+            if (window.pollErrorCount > 10) {
+                clearInterval(pollInterval);
+                addLog('Too many errors. Stopped polling. Please refresh the page.', 'error');
+                
                 const errorSection = document.getElementById('errorSection');
                 const errorText = document.getElementById('errorText');
+                
                 if (errorSection) {
                     errorSection.classList.remove('d-none');
-                    if (errorText) errorText.textContent = error.message;
                 }
-            })
-            .finally(() => {
-                submitBtn.disabled = false;
-                submitBtn.innerHTML = '<i class="bi bi-upload"></i> Start Extraction';
-            });
-    });
+                
+                if (errorText) {
+                    errorText.textContent = 'Status polling failed. Please refresh the page to check extraction status.';
+                }
+            }
+        });
+}
 
-    // Cleanup on page unload
-    window.addEventListener('beforeunload', function () {
-        if (pollInterval) clearInterval(pollInterval);
-        Object.values(fakeProgressIntervals).forEach(interval => clearInterval(interval));
+// Handle form submission
+document.getElementById('uploadForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    // Reset completion flags for new extraction
+    window.extractionCompleted = false;
+    window.extractionFailed = false;
+    
+    // Clear any existing polling interval
+    if (pollInterval) {
+        clearInterval(pollInterval);
+        pollInterval = null;
+    }
+    
+    const submitBtn = document.getElementById('submitBtn');
+    const fileInput = document.getElementById('pdfFile');
+    
+    if (!fileInput.files[0]) {
+        alert('Please select a PDF file');
+        return;
+    }
+    
+    // Check file size (50MB = 52428800 bytes)
+    if (fileInput.files[0].size > 52428800) {
+        alert('File size exceeds 50MB limit');
+        return;
+    }
+    
+    // Show progress section
+    document.getElementById('extractionProgress').style.display = 'block';
+    document.getElementById('extractionProgress').scrollIntoView({ behavior: 'smooth' });
+    
+    // Add initial logs
+    addLog('Starting extraction process...', 'info');
+    addLog(`File: ${fileInput.files[0].name} (${(fileInput.files[0].size / 1024 / 1024).toFixed(2)} MB)`, 'info');
+    addLog(`File type: ${fileInput.files[0].type}`, 'info');
+    
+    // Validate file extension
+    const fileName = fileInput.files[0].name.toLowerCase();
+    if (!fileName.endsWith('.pdf')) {
+        addLog('✗ Invalid file type. Only PDF files are accepted.', 'error');
+        document.getElementById('errorSection').classList.remove('d-none');
+        document.getElementById('errorText').textContent = 'Please select a PDF file (.pdf extension)';
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<i class="bi bi-upload"></i> Start Extraction';
+        return;
+    }
+    
+    // Disable button and show loading
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Uploading...';
+    
+    // Create FormData
+    const formData = new FormData(this);
+    
+    // Upload file
+    addLog('Uploading PDF to server...', 'processing');
+    fetch(this.action, {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => {
+        // Check if response is ok (status 200-299)
+        if (!response.ok) {
+            // Try to parse JSON error response
+            return response.json().catch(err => {
+                // If JSON parse fails, return generic error
+                return { error: `Upload failed with status ${response.status}` };
+            }).then(data => {
+                throw new Error(data.error || 'Upload failed');
+            });
+        }
+        // Try to parse successful response
+        return response.json().catch(err => {
+            // If JSON parse fails for successful response, return generic error
+            throw new Error('Server returned invalid response (empty or malformed JSON)');
+        });
+    })
+    .then(data => {
+        if (data.extraction_id) {
+            extractionId = data.extraction_id;
+            window.pollErrorCount = 0; // Reset error counter
+            
+            addLog(`✓ PDF uploaded successfully. Extraction ID: ${extractionId}`, 'success');
+            addLog('Starting AI-powered extraction...', 'processing');
+            addLog('Converting PDF pages to images...', 'processing');
+            
+            console.log('Starting to poll for extraction ID:', extractionId);
+            
+            // Initialize progress display
+            updateProgress({
+                status: 'pending',
+                total_pages: 0,
+                processed_pages: 0,
+                progress_percent: 0
+            });
+            
+            // Start polling immediately
+            pollStatus();
+            pollInterval = setInterval(pollStatus, 2000);
+        } else if (data.error) {
+            addLog('✗ Upload failed: ' + data.error, 'error');
+            document.getElementById('errorSection').classList.remove('d-none');
+            document.getElementById('errorText').textContent = data.error;
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '<i class="bi bi-upload"></i> Start Extraction';
+        } else {
+            addLog('✗ Upload failed: Unknown error', 'error');
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '<i class="bi bi-upload"></i> Start Extraction';
+        }
+    })
+    .catch(error => {
+        console.error('Upload error:', error);
+        addLog('✗ Upload error: ' + error.message, 'error');
+        
+        // Show error in UI
+        document.getElementById('errorSection').classList.remove('d-none');
+        document.getElementById('errorText').textContent = error.message;
+        
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<i class="bi bi-upload"></i> Start Extraction';
     });
+});
+
+// Cleanup on page unload
+window.addEventListener('beforeunload', function() {
+    if (pollInterval) {
+        clearInterval(pollInterval);
+    }
+});
 </script>
 {% endblock %}
