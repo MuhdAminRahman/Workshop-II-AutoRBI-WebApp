@@ -217,9 +217,8 @@ class BackendAPI:
     def start_extraction(self, work_id: int, file) -> Dict:
         """Start extraction process"""
         # Read file content and prepare for upload
-        file.seek(0)  # Reset file pointer to beginning
         files = {
-            'file': (file.filename, file.read(), file.content_type or 'application/pdf')
+            'file': (file.filename, file.stream(), file.content_type or 'application/pdf')
         }
         return self._post(f'/api/works/{work_id}/extraction/start', files=files)
     
