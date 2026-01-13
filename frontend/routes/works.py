@@ -561,6 +561,10 @@ def extract_page(work_id):
     work = response.get('work', {})
     equipment = response.get('equipment', [])
     files = response.get('files', [])
+
+    # Get backend WebSocket URL
+    backend_url = Config.BACKEND_API_URL  # e.g., https://workshop-ii-autorbi-webapp.onrender.com
+    backend_ws_url = backend_url.replace('https://', 'wss://').replace('http://', 'ws://')
     
     return render_template(
         'works/extract.html',
@@ -568,7 +572,8 @@ def extract_page(work_id):
         equipment=equipment,
         files=files,
         get_status_badge_class=get_status_badge_class,
-        auth_token=token
+        auth_token=token,
+        backend_ws_url=backend_ws_url
     )
 
 @works_bp.route('/<int:work_id>/extraction/start', methods=['POST'])
