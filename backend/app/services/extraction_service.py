@@ -339,25 +339,13 @@ async def extract_from_image(
         
         logger.debug(f"Calling Claude API for {equipment_number}")
         
-        client = anthropic.Anthropic(api_key=settings.CLAUDE_API_KEY)
-        
-        message = client.messages.create(
-            model=settings.CLAUDE_MODEL,
-            max_tokens=4096,
-            messages=[{
-                "role": "user",
-                "content": [
-                    {
-                        "type": "image",
-                        "source": {
-                            "type": "base64",
-                            "media_type": "image/png",
-                            "data": image_base64,
-                        },
-                    },
-                    {"type": "text", "text": prompt}
-                ],
-            }],
+        # Run blocking Claude API call in executor to avoid blocking the event loop
+        loop = asyncio.get_event_loop()
+        message = await loop.run_in_executor(
+            None,
+            _call_claude_api,
+            image_base64,
+            prompt
         )
         
         response_text = message.content[0].text
@@ -368,6 +356,37 @@ async def extract_from_image(
     except Exception as e:
         logger.error(f"❌ Claude API error: {str(e)}")
         raise
+
+
+def _call_claude_api(image_base64: str, prompt: str):
+    """
+    Blocking wrapper for Claude API call.
+    Runs in executor to prevent blocking event loop.
+    
+    This function is synchronous and called via asyncio.run_in_executor()
+    so that the blocking HTTP request to Claude API doesn't prevent other
+    tasks from running on the event loop.
+    """
+    client = anthropic.Anthropic(api_key=settings.CLAUDE_API_KEY)
+    
+    return client.messages.create(
+        model=settings.CLAUDE_MODEL,
+        max_tokens=4096,
+        messages=[{
+            "role": "user",
+            "content": [
+                {
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": "image/png",
+                        "data": image_base64,
+                    },
+                },
+                {"type": "text", "text": prompt}
+            ],
+        }],
+    )
 
 
 # ============================================================================
