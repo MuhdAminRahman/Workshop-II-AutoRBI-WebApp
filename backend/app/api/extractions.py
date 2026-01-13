@@ -1,14 +1,19 @@
 """
-Extraction Routes - Fixed for Parallel Multi-File Processing
-POST /api/works/{workId}/extraction/start - Start extraction
-GET /api/extractions/{extractionId}/status - Get status
-WS /api/ws/extractions/{extractionId} - Real-time progress
+Extraction Routes - REFACTORED FOR DECOUPLING
+Decouples fast database operations from slow Cloudinary uploads and AI extraction
+
+POST /api/works/{workId}/extraction/start
+  1. Create extraction record (FAST, < 100ms)
+  2. Return extraction_id immediately
+  3. Queue upload + extraction as background task (SLOW, happens async)
+  
+This eliminates HTTP timeouts completely.
 """
 
 import logging
 import json
 import asyncio
-from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile, WebSocket, WebSocketDisconnect, BackgroundTasks
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
@@ -21,15 +26,13 @@ from app.schemas.extraction import (
     ExtractionStatusResponse,
 )
 from app.services.extraction_service import (
-    run_extraction,
+    upload_and_extract,
     get_extraction_progress,
 )
 from app.services.permission_service import can_view, can_edit
-from app.utils.cloudinary_util import upload_pdf_to_cloudinary
 from datetime import datetime
 from sqlalchemy import desc
 from pydantic import BaseModel
-
 logger = logging.getLogger(__name__)
 
 # Create router
@@ -100,7 +103,7 @@ async def get_latest_extraction_id(
     """
     logger.info(f"Getting latest extraction ID for work {work_id}")
     
-    # Permission check - require view permission
+    # ✅ Permission check - require view permission
     if not can_view(db, work_id, current_user.id):
         logger.warning(f"User {current_user.username} tried to access unauthorized work {work_id}")
         raise HTTPException(
@@ -142,22 +145,42 @@ async def get_latest_extraction_id(
 # START EXTRACTION - POST /api/works/{workId}/extraction/start
 # ============================================================================
 
+"""
+ARCHITECTURE CHANGE: This endpoint now returns immediately with extraction_id
+instead of waiting for the upload to complete.
+
+BEFORE:
+  POST → Upload to Cloudinary (30-60s) → Create DB record → Queue task → Return
+  Risk: HTTP timeout after 30s of upload, even if it succeeds
+
+AFTER:
+  POST → Create DB record (< 100ms) → Return extraction_id
+         → Background task handles upload + extraction (can take as long as needed)
+  Risk: None - response always returns quickly
+"""
+
 
 @router.post(
     "/works/{work_id}/extraction/start",
     response_model=ExtractionStartResponse,
     status_code=status.HTTP_202_ACCEPTED,
     summary="Start extraction job",
-    description="Upload PDF and start data extraction",
+    description="Queue PDF for extraction and return extraction_id immediately",
 )
 async def start_extraction(
     work_id: int,
     file: UploadFile = File(..., description="GA drawing PDF"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    background_tasks: BackgroundTasks = None,
 ) -> ExtractionStartResponse:
     """
-    Start a new extraction job.
+    Start a new extraction job (DECOUPLED VERSION).
+    
+    This endpoint creates an extraction record immediately and queues the
+    PDF upload + extraction to run in the background. This ensures the
+    HTTP response completes quickly (< 1s) regardless of file size.
+    
     Requires edit permission on work.
     
     Args:
@@ -165,25 +188,37 @@ async def start_extraction(
         file: PDF file upload (GA drawing)
         current_user: Current user (auto-injected)
         db: Database session (auto-injected)
+        background_tasks: Background task runner (auto-injected)
     
     Returns:
-        ExtractionStartResponse with extraction_id and status
+        ExtractionStartResponse with extraction_id and status PENDING
+        
+        The extraction will begin processing in the background. Client should
+        poll GET /api/extractions/{extraction_id}/status to track progress.
     
     Raises:
         HTTPException 404: If work not found
         HTTPException 403: If no edit permission
         HTTPException 422: If file type is wrong
-        HTTPException 400: If upload/creation fails
+        HTTPException 400: If extraction record creation fails
     
     Example:
         POST /api/works/1/extraction/start
         Content-Type: multipart/form-data
         
         file: <binary PDF data>
+        
+        Response (202 Accepted):
+        {
+            "extraction_id": 42,
+            "work_id": 1,
+            "status": "pending",
+            "message": "Extraction 42 queued. Processing in background..."
+        }
     """
     logger.info(f"Starting extraction for work {work_id} by user {current_user.username}")
     
-    # Permission check - require edit permission
+    # ✅ Permission check - require edit permission
     if not can_edit(db, work_id, current_user.id):
         logger.warning(f"User {current_user.username} tried to extract unauthorized work {work_id}")
         raise HTTPException(
@@ -207,16 +242,15 @@ async def start_extraction(
         )
     
     try:
-        # Step 1: Upload PDF to Cloudinary
-        logger.info(f"Uploading PDF to Cloudinary: {file.filename}")
-        pdf_url = await upload_pdf_to_cloudinary(file)
-        logger.info(f"✅ PDF uploaded: {pdf_url}")
+        # ============================================================
+        # STEP 1: Create extraction record IMMEDIATELY (FAST)
+        # ============================================================
+        logger.info(f"Creating extraction record for work {work_id}")
         
-        # Step 2: Create extraction record in database
         extraction = Extraction(
             work_id=work_id,
             status=ExtractionStatus.PENDING,
-            pdf_url=pdf_url,
+            pdf_url="",  # Will be set by background task after upload
             total_pages=0,
             processed_pages=0,
         )
@@ -224,33 +258,56 @@ async def start_extraction(
         db.commit()
         db.refresh(extraction)
         
-        logger.info(f"Created extraction record {extraction.id}")
+        logger.info(f"✅ Extraction record created: {extraction.id}")
         
-        # Step 3: Queue extraction as PARALLEL background task using asyncio
-        # ✅ FIXED: Use asyncio.create_task() instead of BackgroundTasks
-        # This allows multiple extractions to run in parallel
-        logger.info(f"Starting extraction task for extraction {extraction.id} (parallel)")
-        asyncio.create_task(
-            run_extraction(
-                work_id=work_id,
+        # ============================================================
+        # STEP 2: Read file to bytes (safe for background task)
+        # ============================================================
+        # UploadFile might not be available after request ends,
+        # so we read it to bytes now while in the request context
+        logger.info(f"Reading PDF file bytes: {file.filename}")
+        file_bytes = await file.read()
+        file_size_mb = len(file_bytes) / (1024 * 1024)
+        logger.info(f"Read {file_size_mb:.2f}MB file")
+        
+        # ============================================================
+        # STEP 3: Queue background task (SLOW WORK HAPPENS HERE)
+        # ============================================================
+        # All slow operations now happen in the background:
+        # - Upload to Cloudinary (can take 30-60 seconds)
+        # - Convert PDF to images
+        # - AI extraction with Claude
+        # - Database storage
+        
+        if background_tasks:
+            logger.info(f"Queuing background task for extraction {extraction.id}")
+            background_tasks.add_task(
+                upload_and_extract,
                 extraction_id=extraction.id,
-                pdf_url=pdf_url,
-                pdf_filename=file.filename,
+                work_id=work_id,
+                file_bytes=file_bytes,
+                filename=file.filename,
             )
-        )
+        else:
+            logger.warning("No background_tasks available - extraction will not start")
+        
+        # ============================================================
+        # STEP 4: Return immediately with extraction_id (< 1 second)
+        # ============================================================
+        logger.info(f"Extraction {extraction.id} queued successfully")
         
         return ExtractionStartResponse(
             extraction_id=extraction.id,
             work_id=work_id,
             status=ExtractionStatus.PENDING,
-            message=f"Extraction {extraction.id} started. Connect to WebSocket or poll status endpoint for updates.",
+            message=f"Extraction {extraction.id} queued. Processing in background. Poll status endpoint for updates.",
         )
     
     except HTTPException:
         raise
     
     except Exception as e:
-        logger.error(f"Failed to start extraction: {str(e)}", exc_info=True)
+        logger.error(f"Failed to create extraction: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Failed to start extraction: {str(e)}",
@@ -307,7 +364,7 @@ async def get_extraction_status(
             detail="Extraction not found",
         )
     
-    # Permission check - require view permission on the work
+    # ✅ NEW: Permission check - require view permission on the work
     if not can_view(db, extraction.work_id, current_user.id):
         logger.warning(f"User {current_user.username} tried to access unauthorized extraction {extraction_id}")
         raise HTTPException(
@@ -388,19 +445,19 @@ async def websocket_extraction_progress(
         logger.warning(f"WebSocket: Extraction {extraction_id} not found")
         return
     
-    # Proper token validation and permission check
+    # ✅ FIXED: Proper token validation and permission check
     user_id = None
     if token:
         try:
             from app.services.auth_service import decode_access_token
-            user_id = decode_access_token(token)
+            user_id = decode_access_token(token)  # ✅ Returns int or None, not tuple
             
             if user_id is None:
                 await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Invalid token")
                 logger.warning(f"WebSocket: Invalid token for extraction {extraction_id}")
                 return
             
-            # Check permission to view the work
+            # ✅ Check permission to view the work
             if not can_view(db, extraction.work_id, user_id):
                 await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Access denied")
                 logger.warning(f"WebSocket: User {user_id} denied access to extraction {extraction_id}")
@@ -488,19 +545,21 @@ async def websocket_extraction_progress(
 # ============================================================================
 
 """
-Extraction Routes:
+Extraction Routes (DECOUPLED ARCHITECTURE):
 
 1. POST /api/works/{workId}/extraction/start
-   - Upload PDF file
-   - Upload to Cloudinary
-   - Create Extraction record
-   - ✅ FIXED: Queue background task with asyncio.create_task() (parallel!)
-   - Response: ExtractionStartResponse (202 Accepted)
+   - Validates file type
+   - Creates extraction record (FAST, < 100ms)
+   - Reads file to bytes
+   - Queues background task
+   - Returns extraction_id immediately (202 Accepted, < 1 second)
+   - Response includes extraction_id for polling
    - Status: 202 Accepted or 400/404/422/403
    - Permission: edit
 
 2. GET /api/extractions/{extractionId}/status
    - Poll extraction status
+   - Returns current progress
    - Response: ExtractionStatusResponse
    - Status: 200 OK or 404/403
    - Permission: view
@@ -513,9 +572,13 @@ Extraction Routes:
      - Error: {type: "error", message}
    - Permission: view
 
-All routes require authentication (Bearer token)
+BACKGROUND PROCESS:
+   - Uploads PDF to Cloudinary (can take 30-60 seconds)
+   - Creates images from PDF
+   - Calls Claude API for extraction
+   - Stores data in database
+   - Updates extraction status as it progresses
 
-PERFORMANCE IMPROVEMENT:
-- Before: 8-9 minutes for 10 PDFs (sequential processing)
-- After: 2-3 minutes for 10 PDFs (parallel processing)
+All routes require authentication (Bearer token)
+No HTTP timeouts because the endpoint returns before slow work begins
 """
