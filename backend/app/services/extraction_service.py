@@ -168,7 +168,13 @@ async def convert_pdf_to_images(pdf_url: str) -> List:
         logger.info(f"Downloaded PDF: {len(pdf_bytes)} bytes")
         
         logger.info("Converting PDF to images...")
-        images = convert_from_bytes(pdf_bytes, fmt='png')
+        # Run blocking PDF conversion in executor
+        loop = asyncio.get_event_loop()
+        images = await loop.run_in_executor(
+            None,
+            _convert_pdf_helper,
+            pdf_bytes
+        )
         
         logger.info(f"✅ Converted PDF to {len(images)} images")
         return images
@@ -389,6 +395,33 @@ def _call_claude_api(image_base64: str, prompt: str):
     )
 
 
+def _save_image_to_bytes(image):
+    """
+    Save PIL image to PNG bytes.
+    Runs in executor to prevent blocking event loop.
+    
+    This can be slow for large images, so we run it in a thread pool.
+    """
+    img_bytes = io.BytesIO()
+    image.save(img_bytes, format='PNG')
+    img_bytes.seek(0)
+    return img_bytes.getvalue()
+
+
+def _convert_pdf_helper(pdf_bytes: bytes):
+    """
+    Convert PDF bytes to images.
+    Runs in executor to prevent blocking event loop.
+    
+    The pdf2image library's convert_from_bytes is synchronous and can be slow,
+    so we run it in a thread pool to keep event loop responsive.
+    """
+    from pdf2image import convert_from_bytes
+    return convert_from_bytes(pdf_bytes, fmt='png')
+
+
+
+
 # ============================================================================
 # PARSE RESPONSE
 # ============================================================================
@@ -598,10 +631,13 @@ async def run_extraction(
             try:
                 logger.info(f"  Processing page {page_num + 1}/{len(images)}...")
                 
-                img_bytes = io.BytesIO()
-                image.save(img_bytes, format='PNG')
-                img_bytes.seek(0)
-                image_data = img_bytes.getvalue()
+                # Convert image to bytes (can be slow for large images, run in executor)
+                loop = asyncio.get_event_loop()
+                image_data = await loop.run_in_executor(
+                    None,
+                    _save_image_to_bytes,
+                    image
+                )
                 
                 response = await extract_from_image(
                     image_data, equipment_number, pmt_number, description, 
@@ -659,10 +695,13 @@ async def run_extraction(
             # Try each page again
             for page_num, image in enumerate(images):
                 try:
-                    img_bytes = io.BytesIO()
-                    image.save(img_bytes, format='PNG')
-                    img_bytes.seek(0)
-                    image_data = img_bytes.getvalue()
+                    # Convert image to bytes (can be slow for large images, run in executor)
+                    loop = asyncio.get_event_loop()
+                    image_data = await loop.run_in_executor(
+                        None,
+                        _save_image_to_bytes,
+                        image
+                    )
                     
                     response = await extract_from_image(
                         image_data, equipment_number, pmt_number, description,
