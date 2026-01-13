@@ -381,6 +381,13 @@
     // ✅ PARALLEL MULTI-FILE HANDLER
     // ============================================================================
     async function handleMultiFileUpload(files) {
+        // Clear any existing polling intervals from previous uploads
+        if (pollInterval) {
+            clearInterval(pollInterval);
+            pollInterval = null;
+        }
+        window.stopMonitoringExtractions = true;
+
         const submitBtn = document.getElementById('submitBtn');
         const uploadForm = document.getElementById('uploadForm');
 
@@ -500,6 +507,9 @@
 
             addLog('✅ All files processed! Click Next to review the data.', 'success');
 
+            // Stop any remaining polling
+            window.stopMonitoringExtractions = true;
+
         } catch (error) {
             addLog(`✗ Error: ${error.message}`, 'error');
 
@@ -525,6 +535,13 @@
             let completionLogged = false;
 
             const checkInterval = setInterval(async () => {
+                // Stop polling if global flag is set
+                if (window.stopMonitoringExtractions) {
+                    clearInterval(checkInterval);
+                    resolve(false);
+                    return;
+                }
+
                 pollCount++;
 
                 if (pollCount > maxPolls) {
