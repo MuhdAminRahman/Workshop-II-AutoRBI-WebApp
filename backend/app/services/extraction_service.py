@@ -318,7 +318,8 @@ async def extract_from_image(
 
         # Compress image if it's too large for Claude
         logger.debug(f"Original image size: {len(image_bytes):,} bytes")
-        compressed_bytes = compress_image_bytes_for_api(image_bytes)
+        loop = asyncio.get_event_loop()
+        compressed_bytes = await loop.run_in_executor(None, compress_image_bytes_for_api, image_bytes)
         logger.debug(f"Compressed image size: {len(compressed_bytes):,} bytes")
         
         image_base64 = base64.standard_b64encode(compressed_bytes).decode("utf-8")
