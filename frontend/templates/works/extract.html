@@ -405,8 +405,8 @@
         addLog(`Starting upload of ${files.length} files in batches...`, 'info');
 
         try {
-            // ✅ BATCHED UPLOAD: Upload 3 files at a time with 2s delay between batches
-            const BATCH_SIZE = 2;
+            // âœ… BATCHED UPLOAD: Upload 3 files at a time with 2s delay between batches
+            const BATCH_SIZE = 4;
 
             const fileArray = Array.from(files);
             const uploadResults = [];
@@ -578,7 +578,7 @@
                         status: 'in_progress'
                     };
                     if (total > 0) {
-                        addLog(`  ⏳ ${fileName}: ${page}/${total} pages`, 'info');
+                        addLog(`  â³ ${fileName}: ${page}/${total} pages`, 'in_progress info');
                     }
                     setCompletionTimeout();
 
