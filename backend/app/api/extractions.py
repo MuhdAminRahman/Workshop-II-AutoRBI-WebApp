@@ -237,11 +237,9 @@ async def start_extraction(
         logger.info(f"Saving PDF to temp file: {file.filename}")
         
         # Create a temporary file that persists until background task reads it
-        temp_dir = tempfile.gettempdir()
-        temp_file_path = os.path.join(
-            temp_dir, 
-            f"extraction_{extraction.id}_{file.filename}"
-        )
+        import uuid
+        temp_filename = f"extraction_{extraction.id}_{uuid.uuid4().hex[:8]}_{file.filename}"
+        temp_file_path = os.path.join(tempfile.gettempdir(), temp_filename)
         
         try:
             # Save file chunk by chunk (memory efficient)
