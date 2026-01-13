@@ -63,6 +63,51 @@ async def upload_pdf_to_cloudinary(file: UploadFile) -> str:
         raise
 
 
+async def upload_pdf_to_cloudinary_from_bytes(file_bytes: bytes, filename: str) -> str:
+    """
+    Upload PDF file to Cloudinary from bytes.
+    
+    This version accepts bytes directly (for background tasks where UploadFile
+    is not available). Follows the same pattern as upload_excel_to_cloudinary
+    and upload_ppt_to_cloudinary.
+    
+    Args:
+        file_bytes: File content as bytes
+        filename: Filename for storage
+    
+    Returns:
+        Secure URL to uploaded file
+    
+    Raises:
+        Exception: If upload fails
+    
+    Example:
+        url = await upload_pdf_to_cloudinary_from_bytes(file_bytes, "document.pdf")
+        # Returns: https://res.cloudinary.com/.../document.pdf_1234567890
+    """
+    try:
+        logger.debug(f"Uploading PDF: {filename} ({len(file_bytes)} bytes)")
+        
+        # Upload to Cloudinary
+        result = cloudinary.uploader.upload(
+            file_bytes,
+            resource_type="raw",  # For PDFs
+            folder="autorbi/pdfs",
+            public_id=f"{filename}_{int(__import__('time').time())}",
+            overwrite=True,
+        )
+        
+        url = result["secure_url"]
+        
+        logger.info(f"✅ PDF uploaded to Cloudinary: {url}")
+        
+        return url
+    
+    except Exception as e:
+        logger.error(f"Failed to upload PDF to Cloudinary: {str(e)}")
+        raise
+
+
 async def upload_excel_to_cloudinary(file_bytes: bytes, filename: str) -> str:
     """
     Upload Excel file to Cloudinary.
