@@ -238,7 +238,8 @@ async def start_extraction(
         
         # Create a temporary file that persists until background task reads it
         import uuid
-        temp_filename = f"extraction_{extraction.id}_{uuid.uuid4().hex[:8]}_{file.filename}"
+        safe_filename = os.path.basename(file.filename)  # Remove any path components
+        temp_filename = f"extraction_{extraction.id}_{uuid.uuid4().hex[:8]}_{safe_filename}"
         temp_file_path = os.path.join(tempfile.gettempdir(), temp_filename)
         
         try:
