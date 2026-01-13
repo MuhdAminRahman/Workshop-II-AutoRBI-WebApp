@@ -369,6 +369,8 @@
     // Store Flask auth token for WebSocket connections
     window.AUTH_TOKEN = "{{ auth_token }}";
     console.log("✓ Auth token initialized:", window.AUTH_TOKEN ? "token present" : "NO TOKEN!");
+    window.BACKEND_WS_URL = "{{ backend_ws_url }}";
+    console.log("✓ Backend WS URL:", window.BACKEND_WS_URL);
     let extractionId = null;
     let pollInterval = null;
     let allExtractionIds = [];
@@ -548,7 +550,7 @@
             }
 
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsUrl = `${protocol}//${window.location.host}/api/ws/extractions/${extractionId}?token=${token}`;
+            const wsUrl = `${window.BACKEND_WS_URL}/api/ws/extractions/${extractionId}?token=${token}`;
             
             const ws = new WebSocket(wsUrl);
             let timeoutId = null;
