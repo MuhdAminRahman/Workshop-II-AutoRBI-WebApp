@@ -11,10 +11,8 @@ This eliminates HTTP timeouts completely.
 """
 
 import logging
-import json
 import asyncio
 import os
-import tempfile
 from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile, WebSocket, WebSocketDisconnect, BackgroundTasks
 from sqlalchemy.orm import Session
 
@@ -232,55 +230,22 @@ async def start_extraction(
         logger.info(f"✅ Extraction record created: {extraction.id}")
         
         # ============================================================
-        # STEP 2: Save file to temporary location (DON'T READ ALL BYTES)
-        # ============================================================
-        logger.info(f"Saving PDF to temp file: {file.filename}")
-        
-        # Create a temporary file that persists until background task reads it
-        import uuid
-        safe_filename = os.path.basename(file.filename)  # Remove any path components
-        temp_filename = f"extraction_{extraction.id}_{uuid.uuid4().hex[:8]}_{safe_filename}"
-        temp_file_path = os.path.join(tempfile.gettempdir(), temp_filename)
-        
-        try:
-            # Save file chunk by chunk (memory efficient)
-            with open(temp_file_path, 'wb') as f:
-                while True:
-                    chunk = await file.read(1024 * 1024)  # Read 1MB at a time
-                    if not chunk:
-                        break
-                    f.write(chunk)
-            
-            file_size_mb = os.path.getsize(temp_file_path) / (1024 * 1024)
-            logger.info(f"✅ Saved {file_size_mb:.2f}MB to {temp_file_path}")
-            
-        except Exception as e:
-            logger.error(f"Failed to save file: {str(e)}")
-            extraction.status = ExtractionStatus.FAILED
-            extraction.error_message = f"Failed to save file: {str(e)}"
-            db.commit()
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Failed to save file: {str(e)}",
-            )
-        
-        # ============================================================
-        # STEP 3: Queue background task (pass temp file path)
+        # STEP 2: Queue background task (NO FILE I/O HERE!)
         # ============================================================
         if background_tasks:
             logger.info(f"Queuing background task for extraction {extraction.id}")
             background_tasks.add_task(
-                upload_and_extract_from_disk,
+                upload_and_extract_from_upload,
                 extraction_id=extraction.id,
                 work_id=work_id,
-                temp_file_path=temp_file_path,
                 filename=file.filename,
+                file=file,
             )
         else:
             logger.warning("No background_tasks available")
         
         # ============================================================
-        # STEP 4: Return immediately (< 1 second)
+        # STEP 3: Return immediately (< 50ms total)
         # ============================================================
         logger.info(f"Extraction {extraction.id} queued successfully")
         
@@ -301,20 +266,21 @@ async def start_extraction(
             detail=f"Failed to start extraction: {str(e)}",
         )
 
-async def upload_and_extract_from_disk(
+async def upload_and_extract_from_upload(
     extraction_id: int,
     work_id: int,
-    temp_file_path: str,
     filename: str,
+    file: UploadFile,
 ) -> None:
     """
-    Background task: Upload file from disk and run extraction.
+    Background task: Read file from UploadFile, upload to Cloudinary, run extraction.
+    Runs AFTER HTTP response is sent - no timeout!
     
     Args:
         extraction_id: Extraction record ID
         work_id: Work project ID
-        temp_file_path: Path to temporary file (already saved)
         filename: Original filename
+        file: UploadFile object from FastAPI
     """
     from app.db.database import SessionLocal
     from app.utils.cloudinary_util import upload_pdf_to_cloudinary_from_bytes
@@ -324,7 +290,7 @@ async def upload_and_extract_from_disk(
     extraction = None
     
     try:
-        logger.info(f"[Background] Starting upload_and_extract for extraction {extraction_id}")
+        logger.info(f"[Background] Starting for extraction {extraction_id}")
         
         # Get extraction record
         extraction = db.query(Extraction).filter(
@@ -335,20 +301,19 @@ async def upload_and_extract_from_disk(
             logger.error(f"[Background] Extraction {extraction_id} not found")
             return
         
-        # ===== STEP 1: Read file from disk and upload =====
-        logger.info(f"[Background] Reading file from disk: {temp_file_path}")
+        # ===== STEP 1: Read file from UploadFile and upload =====
+        logger.info(f"[Background] Reading uploaded file: {filename}")
         
         try:
-            # Read entire file from disk (disk I/O is fast)
-            with open(temp_file_path, 'rb') as f:
-                file_bytes = f.read()
-            
+            # Read file bytes from UploadFile
+            file_bytes = await file.read()
             file_size_mb = len(file_bytes) / (1024 * 1024)
-            logger.info(f"[Background] Read {file_size_mb:.2f}MB from disk")
+            logger.info(f"[Background] Read {file_size_mb:.2f}MB from upload")
             
             # Upload to Cloudinary
             logger.info(f"[Background] Uploading to Cloudinary...")
-            pdf_url = await upload_pdf_to_cloudinary_from_bytes(file_bytes, filename)
+            safe_filename = os.path.basename(filename)
+            pdf_url = await upload_pdf_to_cloudinary_from_bytes(file_bytes, safe_filename)
             logger.info(f"[Background] ✅ Uploaded: {pdf_url}")
             
         except Exception as e:
@@ -357,14 +322,6 @@ async def upload_and_extract_from_disk(
             extraction.error_message = f"Upload failed: {str(e)}"
             db.commit()
             return
-        finally:
-            # Clean up temp file
-            try:
-                if os.path.exists(temp_file_path):
-                    os.remove(temp_file_path)
-                    logger.debug(f"[Background] Cleaned up temp file: {temp_file_path}")
-            except Exception as e:
-                logger.warning(f"[Background] Failed to clean up temp file: {str(e)}")
         
         # ===== STEP 2: Update extraction with URL =====
         extraction.pdf_url = pdf_url
