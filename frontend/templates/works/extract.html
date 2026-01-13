@@ -401,7 +401,7 @@
 
         try {
             // ✅ BATCHED UPLOAD: Upload 3 files at a time with 2s delay between batches
-            const BATCH_SIZE = 3;
+            const BATCH_SIZE = 2;
 
             const fileArray = Array.from(files);
             const uploadResults = [];
@@ -625,7 +625,7 @@
                     addLog(`  ✗ Error polling ${fileName}: ${error.message}`, 'error');
                     resolve(false);
                 }
-            }, 2000); // Poll every 2 seconds
+            }, 5000); // Poll every 5 seconds
         });
     }
 
