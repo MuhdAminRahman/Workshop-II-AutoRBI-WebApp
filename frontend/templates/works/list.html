@@ -71,7 +71,7 @@
                                     </a>
                                     {% endif %}
                                     {% endif %}
-                                    <a href="{{ url_for('reports.view_reports', work_id=work.id) }}" 
+                                    <a href="{% if is_admin %}{{ url_for('admin.admin_view_report', work_id=work.id) }}{% else %}{{ url_for('reports.view_reports', work_id=work.id) }}{% endif %}" 
                                        class="btn btn-sm btn-outline-success" title="Reports">
                                         <i class="bi bi-file-earmark-text"></i>
                                     </a>

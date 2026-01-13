@@ -152,16 +152,7 @@
                     </div>
                 </div>
 
-                <div class="mb-2">
-                    <div class="alert alert-warning py-2 mb-0">
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" id="confirmUpload" required>
-                            <label class="form-check-label small" for="confirmUpload">
-                                <strong>I confirm</strong> valid GA drawing PDF
-                            </label>
-                        </div>
-                    </div>
-                </div>
+                
 
                 <div class="d-grid gap-2">
                     <button type="submit" class="btn btn-primary" id="submitBtn">
@@ -578,7 +569,7 @@
                         status: 'in_progress'
                     };
                     if (total > 0) {
-                        addLog(`  â³ ${fileName}: ${page}/${total} pages`, 'in_progress info');
+                        addLog(`  🔄 ${fileName}: ${page}/${total} pages`, 'in_progress info');
                     }
                     setCompletionTimeout();
 
@@ -842,7 +833,7 @@
         }
 
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = `${protocol}//${window.location.host}/api/ws/extractions/${extractionId}?token=${token}`;
+        const wsUrl =`${window.BACKEND_WS_URL}/api/ws/extractions/${extractionId}?token=${token}`;
         
         const ws = new WebSocket(wsUrl);
         let timeoutId = null;
