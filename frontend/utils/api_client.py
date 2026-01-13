@@ -217,6 +217,7 @@ class BackendAPI:
     def start_extraction(self, work_id: int, file) -> Dict:
         """Start extraction process"""
         # Read file content and prepare for upload
+        file.seek(0)
         files = {
             'file': (file.filename, file.stream(), file.content_type or 'application/pdf')
         }
