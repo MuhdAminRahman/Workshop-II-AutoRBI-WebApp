@@ -402,19 +402,19 @@
         try {
             // ✅ BATCHED UPLOAD: Upload 3 files at a time with 2s delay between batches
             const BATCH_SIZE = 3;
-            const BATCH_DELAY = 2000; // 2 seconds between batches
 
             const fileArray = Array.from(files);
             const uploadResults = [];
+            let batchNum = 0;
+            const totalBatches = Math.ceil(fileArray.length / BATCH_SIZE);
 
             for (let i = 0; i < fileArray.length; i += BATCH_SIZE) {
                 const batch = fileArray.slice(i, i + BATCH_SIZE);
-                const batchNum = Math.floor(i / BATCH_SIZE) + 1;
-                const totalBatches = Math.ceil(fileArray.length / BATCH_SIZE);
+                batchNum = Math.floor(i / BATCH_SIZE) + 1;
 
                 addLog(`📦 Batch ${batchNum}/${totalBatches}: Uploading ${batch.length} files...`, 'info');
 
-                // Upload this batch in parallel
+                // ===== STEP 1: Upload this batch =====
                 const batchPromises = batch.map(file => {
                     const formData = new FormData();
                     formData.append('file', file);
@@ -444,20 +444,38 @@
                         });
                 });
 
-                // Wait for this batch to complete
+                // Wait for uploads to complete
                 const batchResults = await Promise.all(batchPromises);
                 uploadResults.push(...batchResults);
 
-                addLog(`  ✓ Batch ${batchNum} complete`, 'success');
+                addLog(`  ✓ Batch ${batchNum} uploads complete`, 'success');
 
-                // Delay before next batch (except for last batch)
-                if (i + BATCH_SIZE < fileArray.length) {
-                    addLog(`⏱️  Waiting ${BATCH_DELAY / 1000}s before next batch...`, 'info');
-                    await new Promise(resolve => setTimeout(resolve, BATCH_DELAY));
+                // ===== STEP 2: Wait for this batch's extractions to complete =====
+                const batchExtractionIds = batchResults
+                    .filter(r => r.id !== null)
+                    .map(r => ({ id: r.id, file: r.file }));
+
+                if (batchExtractionIds.length > 0) {
+                    addLog(`⏳ Waiting for Batch ${batchNum} extractions to complete...`, 'info');
+                    
+                    const batchPollPromises = batchExtractionIds.map(result =>
+                        pollExtractionUntilComplete(result.id, result.file)
+                    );
+                    
+                    const batchPollResults = await Promise.all(batchPollPromises);
+                    const batchSuccessCount = batchPollResults.filter(r => r === true).length;
+                    const batchFailCount = batchPollResults.filter(r => r === false).length;
+                    
+                    addLog(`✅ Batch ${batchNum} extractions complete: ${batchSuccessCount} succeeded, ${batchFailCount} failed`, 'success');
+                }
+
+                // Only move to next batch if there is one
+                if (batchNum < totalBatches) {
+                    addLog(`⏱️ Batch ${batchNum} done, preparing next batch...`, 'info');
                 }
             }
 
-            // Filter out failed uploads
+            // All batches processed - extractions were polled during batch loop
             const successfulUploads = uploadResults.filter(r => r.id !== null);
             const failedUploads = uploadResults.filter(r => r.id === null);
 
@@ -472,21 +490,7 @@
             const extractionIds = successfulUploads.map(r => r.id);
             allExtractionIds = extractionIds;
 
-            addLog(`✓ ${successfulUploads.length}/${files.length} files uploaded successfully!`, 'success');
-            addLog(`Starting extraction monitoring...`, 'info');
-
-            // Step 2: Poll ALL extractions in parallel
-            const pollPromises = successfulUploads.map(result =>
-                pollExtractionUntilComplete(result.id, result.file)
-            );
-
-            // Wait for all to complete
-            const results = await Promise.all(pollPromises);
-
-            const successCount = results.filter(r => r === true).length;
-            const failedCount = results.filter(r => r === false).length;
-
-            addLog(`✓ All extractions complete: ${successCount} succeeded, ${failedCount} failed`, 'success');
+            addLog(`✓ ${successfulUploads.length}/${files.length} files uploaded and extracted successfully!`, 'success');
 
             // Update UI
             const statusBadge = document.getElementById('statusBadge');
@@ -531,12 +535,12 @@
     async function pollExtractionUntilComplete(extractionId, fileName) {
         return new Promise((resolve) => {
             let pollCount = 0;
-            const maxPolls = 600; // 20 minutes max (600 * 2s)
+            const maxPolls = 600; // 20 minutes max (600 * 2s) - increased for large files
             let completionLogged = false;
-            let consecutiveErrors = 0;
+            let consecutiveErrors = 0; // Track consecutive 502s
 
             const checkInterval = setInterval(async () => {
-                // Stop polling if flag is set
+                // Stop polling if global flag is set
                 if (window.stopMonitoringExtractions) {
                     clearInterval(checkInterval);
                     resolve(false);
@@ -556,31 +560,35 @@
                     const response = await fetch(`/works/extraction/${extractionId}/status`);
 
                     if (!response.ok) {
-                        // Retry on 502
+                        // Don't fail on 502 - backend might be processing, keep retrying
                         if (response.status === 502) {
                             consecutiveErrors++;
-                            if (consecutiveErrors > 30) {
+                            if (consecutiveErrors > 30) {  // After 30 consecutive 502s (~60 seconds)
                                 clearInterval(checkInterval);
-                                addLog(`  ✗ Failed: ${fileName} - Server error`, 'error');
+                                addLog(`  ✗ Failed: ${fileName} - Server error after multiple retries`, 'error');
                                 resolve(false);
+                            } else {
+                                console.warn(`502 for ${fileName}, will retry... (${consecutiveErrors}/30)`);
                             }
-                            return;
+                            return; // Keep polling
                         }
                         throw new Error(`HTTP ${response.status}`);
                     }
 
+                    // Reset error counter on successful response
                     consecutiveErrors = 0;
+
                     const data = await response.json();
                     const status = (data.status || 'pending').toLowerCase();
 
-                    // Store progress
+                    // Store progress for display
                     extractionProgressMap[extractionId] = {
                         total_pages: data.total_pages || 0,
                         processed_pages: data.processed_pages || 0,
                         status: status
                     };
 
-                    // Log progress every 30 seconds
+                    // Log progress updates (every 15 polls = ~30s)
                     if (pollCount % 15 === 0 && status === 'in_progress') {
                         const pages = data.processed_pages || 0;
                         const total = data.total_pages || 0;
@@ -593,6 +601,7 @@
 
                     if (status === 'completed' || status === 'success') {
                         clearInterval(checkInterval);
+
                         if (!completionLogged) {
                             addLog(`  ✓ Completed: ${fileName}`, 'success');
                             completionLogged = true;
@@ -606,15 +615,17 @@
                         resolve(false);
                     }
                 } catch (error) {
+                    // Network errors - keep retrying for a bit
                     if (pollCount < 5) {
-                        console.warn(`Poll error for ${fileName}:`, error);
+                        console.warn(`Poll error for ${fileName}, retrying:`, error);
                         return;
                     }
+
                     clearInterval(checkInterval);
-                    addLog(`  ✗ Error polling ${fileName}`, 'error');
+                    addLog(`  ✗ Error polling ${fileName}: ${error.message}`, 'error');
                     resolve(false);
                 }
-            }, 2000);
+            }, 2000); // Poll every 2 seconds
         });
     }
 
@@ -843,14 +854,14 @@
     // This allows users to review data that WAS successfully extracted
     function showFallbackReviewButton() {
         addLog(`📋 Showing Review & Edit button - check your data`, 'warning');
-
+        
         const nextButtonContainer = document.getElementById('nextButtonContainer');
         if (nextButtonContainer) {
             nextButtonContainer.classList.remove('d-none');
         }
     }
 
-    // Main form submission handler
+        // Main form submission handler
     document.getElementById('uploadForm').addEventListener('submit', function (e) {
         e.preventDefault();
 
@@ -913,7 +924,7 @@
                     addLog(`⚠️ Server timeout (HTTP 502) - attempting recovery...`, 'warning');
                     return Promise.reject({ code: 502, message: 'Server timeout' });
                 }
-
+                
                 if (!response.ok) {
                     return response.json().catch(err => ({ error: `HTTP ${response.status}` }))
                         .then(data => { throw new Error(data.error || 'Upload failed'); });
@@ -937,7 +948,7 @@
                 // 502 timeout recovery: try to find the extraction that was created
                 if (error.code === 502) {
                     addLog(`Querying server for latest extraction...`, 'info');
-
+                    
                     // Give backend time to commit the extraction record
                     setTimeout(() => {
                         fetch(`/works/extraction/latest?work_id={{ work.id }}`)
@@ -950,7 +961,7 @@
                                     extractionId = data.extraction_id;
                                     addLog(`✓ Recovery successful! Extraction ID: ${extractionId}`, 'success');
                                     addLog(`Polling extraction status...`, 'processing');
-
+                                    
                                     pollStatus();
                                     pollInterval = setInterval(pollStatus, 2000);
                                 } else {
