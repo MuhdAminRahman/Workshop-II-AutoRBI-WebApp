@@ -366,6 +366,7 @@
 
 {% block extra_js %}
 <script>
+    window.AUTH_TOKEN = "{{ auth_token }}";
     let extractionId = null;
     let pollInterval = null;
     let allExtractionIds = [];
@@ -541,7 +542,7 @@
      */
     async function watchExtractionViaWebSocket(extractionId, fileName) {
         return new Promise((resolve) => {
-            const token = localStorage.getItem('access_token');
+            let token = window.AUTH_TOKEN;
             if (!token) {
                 addLog(`  âœ— ${fileName}: No auth token`, 'error');
                 resolve(false);

@@ -567,7 +567,8 @@ def extract_page(work_id):
         work=work,
         equipment=equipment,
         files=files,
-        get_status_badge_class=get_status_badge_class
+        get_status_badge_class=get_status_badge_class,
+        auth_token=token
     )
 
 @works_bp.route('/<int:work_id>/extraction/start', methods=['POST'])
