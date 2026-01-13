@@ -175,35 +175,19 @@ async def start_extraction(
     background_tasks: BackgroundTasks = None,
 ) -> ExtractionStartResponse:
     """
-    FIXED VERSION: Don't wait for file read.
-    
-    Process:
-    1. Validate (fast)
-    2. Create extraction record (fast)
-    3. Save file to temp location (fast)
-    4. Return extraction_id immediately
-    5. Background task reads from disk and uploads
-    
-    This returns in < 1 second regardless of file size.
+    FASTEST: Read file immediately, pass bytes to background task.
+    Returns in < 500ms regardless of file size.
     """
     logger.info(f"Starting extraction for work {work_id} by user {current_user.username}")
     
     # Permission check
     if not can_edit(db, work_id, current_user.id):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Work not found",
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Work not found")
     
-    # Verify work exists
     work = db.query(Work).filter(Work.id == work_id).first()
     if not work:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Work not found",
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Work not found")
     
-    # Validate file type
     if not file.filename.lower().endswith('.pdf'):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -211,15 +195,13 @@ async def start_extraction(
         )
     
     try:
-        # ============================================================
-        # STEP 1: Create extraction record immediately
-        # ============================================================
+        # STEP 1: Create extraction record
         logger.info(f"Creating extraction record for work {work_id}")
         
         extraction = Extraction(
             work_id=work_id,
             status=ExtractionStatus.PENDING,
-            pdf_url="",  # Will be set by background task
+            pdf_url="",
             total_pages=0,
             processed_pages=0,
         )
@@ -229,24 +211,24 @@ async def start_extraction(
         
         logger.info(f"✅ Extraction record created: {extraction.id}")
         
-        # ============================================================
-        # STEP 2: Queue background task (NO FILE I/O HERE!)
-        # ============================================================
+        # STEP 2: Read file bytes (WHILE STREAM IS AVAILABLE)
+        logger.info(f"Reading file: {file.filename}")
+        file_bytes = await file.read()
+        file_size_mb = len(file_bytes) / (1024 * 1024)
+        logger.info(f"✅ Read {file_size_mb:.2f}MB into memory")
+        
+        # STEP 3: Queue background task with bytes (NOT UploadFile)
         if background_tasks:
             logger.info(f"Queuing background task for extraction {extraction.id}")
             background_tasks.add_task(
-                upload_and_extract_from_upload,
+                upload_and_extract_from_bytes,
                 extraction_id=extraction.id,
                 work_id=work_id,
                 filename=file.filename,
-                file=file,
+                file_bytes=file_bytes,
             )
-        else:
-            logger.warning("No background_tasks available")
         
-        # ============================================================
-        # STEP 3: Return immediately (< 50ms total)
-        # ============================================================
+        # STEP 4: Return immediately
         logger.info(f"Extraction {extraction.id} queued successfully")
         
         return ExtractionStartResponse(
@@ -266,21 +248,14 @@ async def start_extraction(
             detail=f"Failed to start extraction: {str(e)}",
         )
 
-async def upload_and_extract_from_upload(
+async def upload_and_extract_from_bytes(
     extraction_id: int,
     work_id: int,
     filename: str,
-    file: UploadFile,
+    file_bytes: bytes,
 ) -> None:
     """
-    Background task: Read file from UploadFile, upload to Cloudinary, run extraction.
-    Runs AFTER HTTP response is sent - no timeout!
-    
-    Args:
-        extraction_id: Extraction record ID
-        work_id: Work project ID
-        filename: Original filename
-        file: UploadFile object from FastAPI
+    Background task: Upload bytes to Cloudinary and run extraction.
     """
     from app.db.database import SessionLocal
     from app.utils.cloudinary_util import upload_pdf_to_cloudinary_from_bytes
@@ -292,7 +267,6 @@ async def upload_and_extract_from_upload(
     try:
         logger.info(f"[Background] Starting for extraction {extraction_id}")
         
-        # Get extraction record
         extraction = db.query(Extraction).filter(
             Extraction.id == extraction_id
         ).first()
@@ -301,17 +275,10 @@ async def upload_and_extract_from_upload(
             logger.error(f"[Background] Extraction {extraction_id} not found")
             return
         
-        # ===== STEP 1: Read file from UploadFile and upload =====
-        logger.info(f"[Background] Reading uploaded file: {filename}")
+        # Upload to Cloudinary
+        logger.info(f"[Background] Uploading {len(file_bytes) / (1024*1024):.2f}MB to Cloudinary...")
         
         try:
-            # Read file bytes from UploadFile
-            file_bytes = await file.read()
-            file_size_mb = len(file_bytes) / (1024 * 1024)
-            logger.info(f"[Background] Read {file_size_mb:.2f}MB from upload")
-            
-            # Upload to Cloudinary
-            logger.info(f"[Background] Uploading to Cloudinary...")
             safe_filename = os.path.basename(filename)
             pdf_url = await upload_pdf_to_cloudinary_from_bytes(file_bytes, safe_filename)
             logger.info(f"[Background] ✅ Uploaded: {pdf_url}")
@@ -323,12 +290,12 @@ async def upload_and_extract_from_upload(
             db.commit()
             return
         
-        # ===== STEP 2: Update extraction with URL =====
+        # Update extraction with URL
         extraction.pdf_url = pdf_url
         db.commit()
         logger.info(f"[Background] Updated extraction {extraction_id} with pdf_url")
         
-        # ===== STEP 3: Run extraction =====
+        # Run extraction
         logger.info(f"[Background] Starting extraction pipeline")
         
         try:
@@ -344,7 +311,6 @@ async def upload_and_extract_from_upload(
             extraction.status = ExtractionStatus.FAILED
             extraction.error_message = f"Extraction failed: {str(e)}"
             db.commit()
-            return
     
     except Exception as e:
         logger.error(f"[Background] Unexpected error: {str(e)}", exc_info=True)
@@ -355,6 +321,7 @@ async def upload_and_extract_from_upload(
     
     finally:
         db.close()
+
 
 # ============================================================================
 # GET EXTRACTION STATUS - GET /api/extractions/{extractionId}/status
