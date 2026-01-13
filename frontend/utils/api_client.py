@@ -219,7 +219,7 @@ class BackendAPI:
         # Read file content and prepare for upload
         file.seek(0)
         files = {
-            'file': (file.filename, file.stream(), file.content_type or 'application/pdf')
+            'file': (file.filename, file, file.content_type or 'application/pdf')
         }
         return self._post(f'/api/works/{work_id}/extraction/start', files=files)
     
