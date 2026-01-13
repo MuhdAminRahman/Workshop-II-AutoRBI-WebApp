@@ -531,11 +531,12 @@
     async function pollExtractionUntilComplete(extractionId, fileName) {
         return new Promise((resolve) => {
             let pollCount = 0;
-            const maxPolls = 300; // 10 minutes max (300 * 2s)
+            const maxPolls = 600; // 20 minutes max (600 * 2s)
             let completionLogged = false;
+            let consecutiveErrors = 0;
 
             const checkInterval = setInterval(async () => {
-                // Stop polling if global flag is set
+                // Stop polling if flag is set
                 if (window.stopMonitoringExtractions) {
                     clearInterval(checkInterval);
                     resolve(false);
@@ -546,7 +547,7 @@
 
                 if (pollCount > maxPolls) {
                     clearInterval(checkInterval);
-                    addLog(`  ✗ Timeout: ${fileName} (exceeded 10 min)`, 'error');
+                    addLog(`  ✗ Timeout: ${fileName} (exceeded 20 min)`, 'error');
                     resolve(false);
                     return;
                 }
@@ -555,36 +556,43 @@
                     const response = await fetch(`/works/extraction/${extractionId}/status`);
 
                     if (!response.ok) {
-                        // Don't fail on 502 - backend might be processing, just retry
+                        // Retry on 502
                         if (response.status === 502) {
-                            console.warn(`502 for ${fileName}, will retry...`);
-                            return; // Keep polling
+                            consecutiveErrors++;
+                            if (consecutiveErrors > 30) {
+                                clearInterval(checkInterval);
+                                addLog(`  ✗ Failed: ${fileName} - Server error`, 'error');
+                                resolve(false);
+                            }
+                            return;
                         }
                         throw new Error(`HTTP ${response.status}`);
                     }
 
+                    consecutiveErrors = 0;
                     const data = await response.json();
                     const status = (data.status || 'pending').toLowerCase();
 
-                    // Store progress for display
+                    // Store progress
                     extractionProgressMap[extractionId] = {
                         total_pages: data.total_pages || 0,
                         processed_pages: data.processed_pages || 0,
                         status: status
                     };
 
-                    // Log progress updates (every 10 polls = ~20s)
-                    if (pollCount % 10 === 0 && status === 'in_progress') {
+                    // Log progress every 30 seconds
+                    if (pollCount % 15 === 0 && status === 'in_progress') {
                         const pages = data.processed_pages || 0;
                         const total = data.total_pages || 0;
                         if (total > 0) {
                             addLog(`  ⏳ ${fileName}: ${pages}/${total} pages`, 'info');
+                        } else {
+                            addLog(`  ⏳ ${fileName}: Processing...`, 'info');
                         }
                     }
 
                     if (status === 'completed' || status === 'success') {
                         clearInterval(checkInterval);
-
                         if (!completionLogged) {
                             addLog(`  ✓ Completed: ${fileName}`, 'success');
                             completionLogged = true;
@@ -598,17 +606,15 @@
                         resolve(false);
                     }
                 } catch (error) {
-                    // Network errors - keep retrying for a bit
                     if (pollCount < 5) {
-                        console.warn(`Poll error for ${fileName}, retrying:`, error);
+                        console.warn(`Poll error for ${fileName}:`, error);
                         return;
                     }
-
                     clearInterval(checkInterval);
-                    addLog(`  ✗ Error polling ${fileName}: ${error.message}`, 'error');
+                    addLog(`  ✗ Error polling ${fileName}`, 'error');
                     resolve(false);
                 }
-            }, 2000); // Poll every 2 seconds
+            }, 2000);
         });
     }
 
@@ -837,14 +843,14 @@
     // This allows users to review data that WAS successfully extracted
     function showFallbackReviewButton() {
         addLog(`📋 Showing Review & Edit button - check your data`, 'warning');
-        
+
         const nextButtonContainer = document.getElementById('nextButtonContainer');
         if (nextButtonContainer) {
             nextButtonContainer.classList.remove('d-none');
         }
     }
 
-        // Main form submission handler
+    // Main form submission handler
     document.getElementById('uploadForm').addEventListener('submit', function (e) {
         e.preventDefault();
 
@@ -907,7 +913,7 @@
                     addLog(`⚠️ Server timeout (HTTP 502) - attempting recovery...`, 'warning');
                     return Promise.reject({ code: 502, message: 'Server timeout' });
                 }
-                
+
                 if (!response.ok) {
                     return response.json().catch(err => ({ error: `HTTP ${response.status}` }))
                         .then(data => { throw new Error(data.error || 'Upload failed'); });
@@ -931,7 +937,7 @@
                 // 502 timeout recovery: try to find the extraction that was created
                 if (error.code === 502) {
                     addLog(`Querying server for latest extraction...`, 'info');
-                    
+
                     // Give backend time to commit the extraction record
                     setTimeout(() => {
                         fetch(`/works/extraction/latest?work_id={{ work.id }}`)
@@ -944,7 +950,7 @@
                                     extractionId = data.extraction_id;
                                     addLog(`✓ Recovery successful! Extraction ID: ${extractionId}`, 'success');
                                     addLog(`Polling extraction status...`, 'processing');
-                                    
+
                                     pollStatus();
                                     pollInterval = setInterval(pollStatus, 2000);
                                 } else {
