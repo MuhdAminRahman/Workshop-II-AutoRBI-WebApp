@@ -9,6 +9,7 @@ import asyncio
 import io
 import base64
 import re
+import time
 from typing import Optional, Dict, List
 from datetime import datetime
 
@@ -407,7 +408,7 @@ async def run_extraction(
     
     db = SessionLocal()
     extraction = None
-    
+    start_time = time.time()
     try:
         logger.info(f"Starting extraction for work {work_id}, file: {pdf_filename}")
         
@@ -468,7 +469,9 @@ async def run_extraction(
         extraction.total_pages = len(images)
         db.commit()
         logger.info(f"Step 2 complete: {len(images)} pages")
-        
+        conversion_time = time.time() - start_time
+        logger.info(f"⏱️ PDF conversion done in {conversion_time:.1f}s")
+
         # ===== STEP 4: EXTRACT DATA (WITH RETRY) =====
         logger.info("Step 3: Extracting component data...")
         extracted_data = None
@@ -500,11 +503,15 @@ async def run_extraction(
                     if completeness >= completeness_threshold:
                         logger.info(f"     Completeness {completeness:.0f}% >= threshold, done with Pass 1")
                         extraction.processed_pages = len(images)
+                        pass1_time = time.time() - start_time
+                        logger.info(f"⏱️ Pass 1 complete in {pass1_time:.1f}s")
                         break
                     else:
                         logger.info(f"     Completeness {completeness:.0f}% < {completeness_threshold}%, will retry")
                 
                 extraction.processed_pages = page_num + 1
+                pass1_time = time.time() - start_time
+                logger.info(f"⏱️ Pass 1 complete in {pass1_time:.1f}s")
                 db.commit()
             
             except Exception as e:
@@ -606,7 +613,9 @@ async def run_extraction(
         extraction.status = ExtractionStatus.COMPLETED
         extraction.completed_at = datetime.utcnow()
         db.commit()
-        
+        total_time = time.time() - start_time
+        logger.info(f"⏱️ EXTRACTION COMPLETE for {pdf_filename} - Total time: {total_time:.1f}s")
+
         logger.info(f"✅ Extraction {extraction_id} completed successfully!")
     
     except Exception as e:
