@@ -25,10 +25,15 @@ from app.db.database import SessionLocal
 from app.config import settings
 from app.utils.extraction_rules import ExtractionRules
 from app.utils.prompt_builder import PromptBuilder
+from asyncio import Semaphore
 
 logger = logging.getLogger(__name__)
 
+# Maximum number of extractions that can run simultaneously
+MAX_CONCURRENT_EXTRACTIONS = 3
 
+# Semaphore to control concurrency
+extraction_semaphore = Semaphore(MAX_CONCURRENT_EXTRACTIONS)
 # ============================================================================
 # FILENAME PARSING
 # ============================================================================
@@ -65,21 +70,37 @@ async def convert_pdf_to_images(pdf_url: str) -> List:
         
         logger.info(f"Downloading PDF from: {pdf_url}")
         
-        async with httpx.AsyncClient() as client:
+        # Add timeout to prevent hanging
+        async with httpx.AsyncClient(timeout=60.0) as client:  # 60s timeout
             response = await client.get(pdf_url)
             response.raise_for_status()
             pdf_bytes = response.content
         
         logger.info(f"Downloaded PDF: {len(pdf_bytes)} bytes")
         
+        # Check file size before processing
+        max_size = 10 * 1024 * 1024  # 10MB
+        if len(pdf_bytes) > max_size:
+            raise ValueError(f"PDF too large: {len(pdf_bytes)} bytes (max {max_size})")
+        
         logger.info("Converting PDF to images...")
-        images = convert_from_bytes(pdf_bytes, fmt='png')
+        
+        # Run PDF conversion in thread pool to avoid blocking
+        loop = asyncio.get_event_loop()
+        images = await loop.run_in_executor(
+            None,  # Use default executor
+            lambda: convert_from_bytes(pdf_bytes, fmt='png', dpi=150)  # Lower DPI to save memory
+        )
         
         logger.info(f"✅ Converted PDF to {len(images)} images")
         return images
     
+    except asyncio.TimeoutError:
+        logger.error(f"❌ Timeout downloading PDF from: {pdf_url}")
+        raise Exception("PDF download timed out after 60 seconds")
+    
     except Exception as e:
-        logger.error(f"❌ Failed to convert PDF: {str(e)}")
+        logger.error(f"❌ Failed to convert PDF: {str(e)}", exc_info=True)
         raise
 
 
@@ -406,229 +427,226 @@ async def run_extraction(
     7. Store data when complete
     """
     
-    db = SessionLocal()
-    extraction = None
-    start_time = time.time()
-    try:
-        logger.info(f"Starting extraction for work {work_id}, file: {pdf_filename}")
+    # Wait for semaphore slot
+    async with extraction_semaphore:
+        logger.info(f"[Queue] Extraction {extraction_id} acquired slot ({MAX_CONCURRENT_EXTRACTIONS} max)")
         
-        extraction = db.query(Extraction).filter(
-            Extraction.id == extraction_id
-        ).first()
+        db = SessionLocal()
+        extraction = None
         
-        if not extraction:
-            logger.error(f"Extraction {extraction_id} not found")
-            return
-        
-        # Mark as in progress
-        extraction.status = ExtractionStatus.IN_PROGRESS
-        db.commit()
-        
-        # ===== STEP 1: PARSE FILENAME =====
-        logger.info("Step 1: Parsing equipment from filename...")
-        equipment_number, pmt_number = parse_equipment_from_filename(pdf_filename)
-        
-        if not equipment_number:
-            error = f"Could not parse equipment number from filename: {pdf_filename}"
-            logger.error(f"❌ {error}")
-            extraction.status = ExtractionStatus.FAILED
-            extraction.error_message = error
-            db.commit()
-            return
-        
-        # ===== STEP 2: LOAD EQUIPMENT METADATA =====
-        rules = ExtractionRules()
-        equipment_meta = rules.get_equipment(equipment_number)
-        
-        if not equipment_meta:
-            error = f"Equipment {equipment_number} not found in rules"
-            logger.error(f"❌ {error}")
-            extraction.status = ExtractionStatus.FAILED
-            extraction.error_message = error
-            db.commit()
-            return
-        
-        description = equipment_meta.get('description', '')
-        components_with_expected = equipment_meta.get('components', {})
-        
-        logger.info(f"✅ Equipment: {equipment_number} ({description})")
-        logger.info(f"   Components: {', '.join(components_with_expected.keys())}")
-        
-        # ===== STEP 3: CONVERT PDF =====
-        logger.info("Step 2: Converting PDF to images...")
         try:
-            images = await convert_pdf_to_images(pdf_url)
-        except Exception as e:
-            error = f"Failed to convert PDF: {str(e)}"
-            logger.error(f"❌ {error}")
-            extraction.status = ExtractionStatus.FAILED
-            extraction.error_message = error
+            logger.info(f"Starting extraction for work {work_id}, file: {pdf_filename}")
+            
+            extraction = db.query(Extraction).filter(
+                Extraction.id == extraction_id
+            ).first()
+            
+            if not extraction:
+                logger.error(f"Extraction {extraction_id} not found")
+                return
+            
+            # Mark as in progress
+            extraction.status = ExtractionStatus.IN_PROGRESS
             db.commit()
-            return
-        
-        extraction.total_pages = len(images)
-        db.commit()
-        logger.info(f"Step 2 complete: {len(images)} pages")
-        conversion_time = time.time() - start_time
-        logger.info(f"⏱️ PDF conversion done in {conversion_time:.1f}s")
-
-        # ===== STEP 4: EXTRACT DATA (WITH RETRY) =====
-        logger.info("Step 3: Extracting component data...")
-        extracted_data = None
-        completeness_threshold = 85
-        
-        # PASS 1: Initial extraction
-        logger.info("📍 Pass 1: Initial extraction...")
-        for page_num, image in enumerate(images):
-            try:
-                logger.info(f"  Processing page {page_num + 1}/{len(images)}...")
-                
-                img_bytes = io.BytesIO()
-                image.save(img_bytes, format='PNG')
-                img_bytes.seek(0)
-                image_data = img_bytes.getvalue()
-                
-                response = await extract_from_image(
-                    image_data, equipment_number, pmt_number, description, 
-                    components_with_expected, prompt=None
-                )
-                
-                page_data = parse_extraction_response(response)
-                
-                if page_data.get('components'):
-                    extracted_data = page_data
-                    completeness, missing = rules.get_completeness_score(equipment_number, page_data)
-                    logger.info(f"  ✅ Page {page_num + 1} extracted (completeness: {completeness:.0f}%)")
-                    
-                    if completeness >= completeness_threshold:
-                        logger.info(f"     Completeness {completeness:.0f}% >= threshold, done with Pass 1")
-                        extraction.processed_pages = len(images)
-                        pass1_time = time.time() - start_time
-                        logger.info(f"⏱️ Pass 1 complete in {pass1_time:.1f}s")
-                        break
-                    else:
-                        logger.info(f"     Completeness {completeness:.0f}% < {completeness_threshold}%, will retry")
-                
-                extraction.processed_pages = page_num + 1
-                pass1_time = time.time() - start_time
-                logger.info(f"⏱️ Pass 1 complete in {pass1_time:.1f}s")
+            
+            # ===== STEP 1: PARSE FILENAME =====
+            logger.info("Step 1: Parsing equipment from filename...")
+            equipment_number, pmt_number = parse_equipment_from_filename(pdf_filename)
+            
+            if not equipment_number:
+                error = f"Could not parse equipment number from filename: {pdf_filename}"
+                logger.error(f"❌ {error}")
+                extraction.status = ExtractionStatus.FAILED
+                extraction.error_message = error
                 db.commit()
+                return
             
+            # ===== STEP 2: LOAD EQUIPMENT METADATA =====
+            rules = ExtractionRules()
+            equipment_meta = rules.get_equipment(equipment_number)
+            
+            if not equipment_meta:
+                error = f"Equipment {equipment_number} not found in rules"
+                logger.error(f"❌ {error}")
+                extraction.status = ExtractionStatus.FAILED
+                extraction.error_message = error
+                db.commit()
+                return
+            
+            description = equipment_meta.get('description', '')
+            components_with_expected = equipment_meta.get('components', {})
+            
+            logger.info(f"✅ Equipment: {equipment_number} ({description})")
+            logger.info(f"   Components: {', '.join(components_with_expected.keys())}")
+            
+            # ===== STEP 3: CONVERT PDF =====
+            logger.info("Step 2: Converting PDF to images...")
+            try:
+                images = await convert_pdf_to_images(pdf_url)
             except Exception as e:
-                logger.warning(f"  ⚠️  Error on page {page_num + 1}: {str(e)}")
-                continue
-        
-        # Check if we have data
-        if not extracted_data:
-            error = "Pass 1: No extraction data from any page"
-            logger.error(f"❌ {error}")
-            extraction.status = ExtractionStatus.FAILED
-            extraction.error_message = error
+                error = f"Failed to convert PDF: {str(e)}"
+                logger.error(f"❌ {error}")
+                extraction.status = ExtractionStatus.FAILED
+                extraction.error_message = error
+                db.commit()
+                return
+            
+            extraction.total_pages = len(images)
             db.commit()
-            return
-        
-        # PASS 2+: Retry for missing fields
-        completeness, missing_by_comp = rules.get_completeness_score(equipment_number, extracted_data)
-        
-        for retry_num in range(1, 3):  # Max 2 retries
-            if completeness >= completeness_threshold:
-                logger.info(f"✅ Completeness {completeness:.0f}% is sufficient, stopping retries")
-                break
+            logger.info(f"Step 2 complete: {len(images)} pages")
             
-            logger.info(f"🔄 Pass {retry_num + 1}: Retry for missing fields...")
-            logger.info(f"   Current completeness: {completeness:.0f}%")
-            logger.info(f"   Missing: {missing_by_comp}")
+            # ===== STEP 4: EXTRACT DATA (WITH RETRY) =====
+            logger.info("Step 3: Extracting component data...")
+            extracted_data = None
+            completeness_threshold = 85
             
-            # Build retry prompt
-            retry_prompt = PromptBuilder.build_extraction_prompt(
-                equipment_number, pmt_number, description,
-                components_with_expected, retry_missing_fields=missing_by_comp
-            )
-            
-            # Try each page again
+            # PASS 1: Initial extraction
+            logger.info("📍 Pass 1: Initial extraction...")
             for page_num, image in enumerate(images):
                 try:
+                    logger.info(f"  Processing page {page_num + 1}/{len(images)}...")
+                    
                     img_bytes = io.BytesIO()
                     image.save(img_bytes, format='PNG')
                     img_bytes.seek(0)
                     image_data = img_bytes.getvalue()
                     
                     response = await extract_from_image(
-                        image_data, equipment_number, pmt_number, description,
-                        components_with_expected, prompt=retry_prompt
+                        image_data, equipment_number, pmt_number, description, 
+                        components_with_expected, prompt=None
                     )
                     
-                    retry_data = parse_extraction_response(response)
+                    page_data = parse_extraction_response(response)
                     
-                    # Merge: update existing components with retry data
-                    for retry_comp in retry_data.get('components', []):
-                        for existing_comp in extracted_data.get('components', []):
-                            if existing_comp.get('component_name') == retry_comp.get('component_name'):
-                                # Only update if retry has non-empty value
-                                for key in ['fluid', 'material_spec', 'material_grade', 'insulation',
-                                          'design_temp', 'design_pressure', 'operating_temp', 'operating_pressure']:
-                                    if retry_comp.get(key) and str(retry_comp.get(key)).strip():
-                                        existing_comp[key] = retry_comp.get(key)
-                                break
+                    if page_data.get('components'):
+                        extracted_data = page_data
+                        completeness, missing = rules.get_completeness_score(equipment_number, page_data)
+                        logger.info(f"  ✅ Page {page_num + 1} extracted (completeness: {completeness:.0f}%)")
+                        
+                        if completeness >= completeness_threshold:
+                            logger.info(f"     Completeness {completeness:.0f}% >= threshold, done with Pass 1")
+                            extraction.processed_pages = len(images)
+                            break
+                        else:
+                            logger.info(f"     Completeness {completeness:.0f}% < {completeness_threshold}%, will retry")
                     
-                    logger.info(f"   ✅ Page {page_num + 1} merged")
+                    extraction.processed_pages = page_num + 1
+                    db.commit()
                 
                 except Exception as e:
-                    logger.warning(f"   ⚠️  Retry error on page {page_num + 1}: {str(e)}")
+                    logger.warning(f"  ⚠️  Error on page {page_num + 1}: {str(e)}")
                     continue
             
-            # Recalculate completeness
+            # Check if we have data
+            if not extracted_data:
+                error = "Pass 1: No extraction data from any page"
+                logger.error(f"❌ {error}")
+                extraction.status = ExtractionStatus.FAILED
+                extraction.error_message = error
+                db.commit()
+                return
+            
+            # PASS 2+: Retry for missing fields
             completeness, missing_by_comp = rules.get_completeness_score(equipment_number, extracted_data)
-            logger.info(f"   Updated completeness: {completeness:.0f}%")
+            
+            for retry_num in range(1, 3):  # Max 2 retries
+                if completeness >= completeness_threshold:
+                    logger.info(f"✅ Completeness {completeness:.0f}% is sufficient, stopping retries")
+                    break
+                
+                logger.info(f"🔄 Pass {retry_num + 1}: Retry for missing fields...")
+                logger.info(f"   Current completeness: {completeness:.0f}%")
+                logger.info(f"   Missing: {missing_by_comp}")
+                
+                # Build retry prompt
+                retry_prompt = PromptBuilder.build_extraction_prompt(
+                    equipment_number, pmt_number, description,
+                    components_with_expected, retry_missing_fields=missing_by_comp
+                )
+                
+                # Try each page again
+                for page_num, image in enumerate(images):
+                    try:
+                        img_bytes = io.BytesIO()
+                        image.save(img_bytes, format='PNG')
+                        img_bytes.seek(0)
+                        image_data = img_bytes.getvalue()
+                        
+                        response = await extract_from_image(
+                            image_data, equipment_number, pmt_number, description,
+                            components_with_expected, prompt=retry_prompt
+                        )
+                        
+                        retry_data = parse_extraction_response(response)
+                        
+                        # Merge: update existing components with retry data
+                        for retry_comp in retry_data.get('components', []):
+                            for existing_comp in extracted_data.get('components', []):
+                                if existing_comp.get('component_name') == retry_comp.get('component_name'):
+                                    # Only update if retry has non-empty value
+                                    for key in ['fluid', 'material_spec', 'material_grade', 'insulation',
+                                              'design_temp', 'design_pressure', 'operating_temp', 'operating_pressure']:
+                                        if retry_comp.get(key) and str(retry_comp.get(key)).strip():
+                                            existing_comp[key] = retry_comp.get(key)
+                                    break
+                        
+                        logger.info(f"   ✅ Page {page_num + 1} merged")
+                    
+                    except Exception as e:
+                        logger.warning(f"   ⚠️  Retry error on page {page_num + 1}: {str(e)}")
+                        continue
+                
+                # Recalculate completeness
+                completeness, missing_by_comp = rules.get_completeness_score(equipment_number, extracted_data)
+                logger.info(f"   Updated completeness: {completeness:.0f}%")
+            
+            # ===== STEP 5: FINAL CHECK =====
+            final_completeness, final_missing = rules.get_completeness_score(equipment_number, extracted_data)
+            logger.info(f"Step 3 complete: Extraction done")
+            logger.info(f"  Final completeness: {final_completeness:.0f}%")
+            
+            if final_missing:
+                logger.warning(f"  ⚠️  Some fields still missing: {final_missing}")
+            
+            # ===== STEP 6: STORE DATA =====
+            try:
+                logger.info("Step 4: Storing data in database...")
+                component_count = await store_equipment_data(
+                    db=db,
+                    work_id=work_id,
+                    equipment_number=equipment_number,
+                    pmt_number=pmt_number,
+                    description=description,
+                    components_data=extracted_data.get('components', [])
+                )
+                logger.info(f"Step 4 complete: Stored {component_count} components")
+            except Exception as e:
+                error = f"Failed to store data: {str(e)}"
+                logger.error(f"❌ {error}")
+                extraction.status = ExtractionStatus.FAILED
+                extraction.error_message = error
+                db.commit()
+                return
+            
+            # ===== SUCCESS =====
+            extraction.status = ExtractionStatus.COMPLETED
+            extraction.completed_at = datetime.utcnow()
+            db.commit()
+            
+            logger.info(f"✅ Extraction {extraction_id} completed successfully!")
         
-        # ===== STEP 5: FINAL CHECK =====
-        final_completeness, final_missing = rules.get_completeness_score(equipment_number, extracted_data)
-        logger.info(f"Step 3 complete: Extraction done")
-        logger.info(f"  Final completeness: {final_completeness:.0f}%")
-        
-        if final_missing:
-            logger.warning(f"  ⚠️  Some fields still missing: {final_missing}")
-        
-        # ===== STEP 6: STORE DATA =====
-        try:
-            logger.info("Step 4: Storing data in database...")
-            component_count = await store_equipment_data(
-                db=db,
-                work_id=work_id,
-                equipment_number=equipment_number,
-                pmt_number=pmt_number,
-                description=description,
-                components_data=extracted_data.get('components', [])
-            )
-            logger.info(f"Step 4 complete: Stored {component_count} components")
         except Exception as e:
-            error = f"Failed to store data: {str(e)}"
-            logger.error(f"❌ {error}")
-            extraction.status = ExtractionStatus.FAILED
-            extraction.error_message = error
-            db.commit()
-            return
+            error = f"Unexpected error: {str(e)}"
+            logger.error(f"❌ {error}", exc_info=True)
+            
+            if extraction:
+                extraction.status = ExtractionStatus.FAILED
+                extraction.error_message = error
+                db.commit()
         
-        # ===== SUCCESS =====
-        extraction.status = ExtractionStatus.COMPLETED
-        extraction.completed_at = datetime.utcnow()
-        db.commit()
-        total_time = time.time() - start_time
-        logger.info(f"⏱️ EXTRACTION COMPLETE for {pdf_filename} - Total time: {total_time:.1f}s")
-
-        logger.info(f"✅ Extraction {extraction_id} completed successfully!")
-    
-    except Exception as e:
-        error = f"Unexpected error: {str(e)}"
-        logger.error(f"❌ {error}", exc_info=True)
-        
-        if extraction:
-            extraction.status = ExtractionStatus.FAILED
-            extraction.error_message = error
-            db.commit()
-    
-    finally:
-        db.close()
+        finally:
+            db.close()
+            logger.info(f"[Queue] Extraction {extraction_id} released slot")
 
 
 # ============================================================================
