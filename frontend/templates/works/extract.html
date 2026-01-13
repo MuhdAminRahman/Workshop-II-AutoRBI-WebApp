@@ -532,101 +532,76 @@
     // ============================================================================
     // Poll extraction until complete (works for both single and multi-file)
     // ============================================================================
-    async function pollExtractionUntilComplete(extractionId, fileName) {
+    /**
+     * Watch extraction via WebSocket (REAL-TIME, no polling!)
+     */
+    async function watchExtractionViaWebSocket(extractionId, fileName) {
         return new Promise((resolve) => {
-            let pollCount = 0;
-            const maxPolls = 600; // 20 minutes max (600 * 2s) - increased for large files
-            let completionLogged = false;
-            let consecutiveErrors = 0; // Track consecutive 502s
+            const token = localStorage.getItem('access_token');
+            if (!token) {
+                addLog(`  ✗ ${fileName}: No auth token`, 'error');
+                resolve(false);
+                return;
+            }
 
-            const checkInterval = setInterval(async () => {
-                // Stop polling if global flag is set
-                if (window.stopMonitoringExtractions) {
-                    clearInterval(checkInterval);
-                    resolve(false);
-                    return;
-                }
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/api/ws/extractions/${extractionId}?token=${token}`;
+            
+            const ws = new WebSocket(wsUrl);
+            let timeoutId = null;
 
-                pollCount++;
+            const setCompletionTimeout = () => {
+                if (timeoutId) clearTimeout(timeoutId);
+                timeoutId = setTimeout(() => {
+                    ws.close();
+                }, 600000);
+            };
 
-                if (pollCount > maxPolls) {
-                    clearInterval(checkInterval);
-                    addLog(`  ✗ Timeout: ${fileName} (exceeded 20 min)`, 'error');
-                    resolve(false);
-                    return;
-                }
+            ws.onopen = () => {
+                addLog(`  ⏳ ${fileName}: Monitoring...`, 'info');
+                setCompletionTimeout();
+            };
 
-                try {
-                    const response = await fetch(`/works/extraction/${extractionId}/status`);
+            ws.onmessage = (event) => {
+                const message = JSON.parse(event.data);
 
-                    if (!response.ok) {
-                        // Don't fail on 502 - backend might be processing, keep retrying
-                        if (response.status === 502) {
-                            consecutiveErrors++;
-                            if (consecutiveErrors > 30) {  // After 30 consecutive 502s (~60 seconds)
-                                clearInterval(checkInterval);
-                                addLog(`  ✗ Failed: ${fileName} - Server error after multiple retries`, 'error');
-                                resolve(false);
-                            } else {
-                                console.warn(`502 for ${fileName}, will retry... (${consecutiveErrors}/30)`);
-                            }
-                            return; // Keep polling
-                        }
-                        throw new Error(`HTTP ${response.status}`);
-                    }
-
-                    // Reset error counter on successful response
-                    consecutiveErrors = 0;
-
-                    const data = await response.json();
-                    const status = (data.status || 'pending').toLowerCase();
-
-                    // Store progress for display
+                if (message.type === 'progress') {
+                    const { page, total } = message;
                     extractionProgressMap[extractionId] = {
-                        total_pages: data.total_pages || 0,
-                        processed_pages: data.processed_pages || 0,
-                        status: status
+                        total_pages: total,
+                        processed_pages: page,
+                        status: 'in_progress'
                     };
-
-                    // Log progress updates (every 15 polls = ~30s)
-                    if (pollCount % 15 === 0 && status === 'in_progress') {
-                        const pages = data.processed_pages || 0;
-                        const total = data.total_pages || 0;
-                        if (total > 0) {
-                            addLog(`  ⏳ ${fileName}: ${pages}/${total} pages`, 'info');
-                        } else {
-                            addLog(`  ⏳ ${fileName}: Processing...`, 'info');
-                        }
+                    if (total > 0) {
+                        addLog(`  ⏳ ${fileName}: ${page}/${total} pages`, 'info');
                     }
+                    setCompletionTimeout();
 
-                    if (status === 'completed' || status === 'success') {
-                        clearInterval(checkInterval);
+                } else if (message.type === 'completed') {
+                    addLog(`  ✓ Completed: ${fileName}`, 'success');
+                    clearTimeout(timeoutId);
+                    ws.close();
+                    resolve(true);
 
-                        if (!completionLogged) {
-                            addLog(`  ✓ Completed: ${fileName}`, 'success');
-                            completionLogged = true;
-                        }
-                        resolve(true);
-
-                    } else if (status === 'failed' || status === 'error') {
-                        clearInterval(checkInterval);
-                        const errorMsg = data.error_message || 'Unknown error';
-                        addLog(`  ✗ Failed: ${fileName} - ${errorMsg}`, 'error');
-                        resolve(false);
-                    }
-                } catch (error) {
-                    // Network errors - keep retrying for a bit
-                    if (pollCount < 5) {
-                        console.warn(`Poll error for ${fileName}, retrying:`, error);
-                        return;
-                    }
-
-                    clearInterval(checkInterval);
-                    addLog(`  ✗ Error polling ${fileName}: ${error.message}`, 'error');
+                } else if (message.type === 'error') {
+                    addLog(`  ✗ Failed: ${fileName} - ${message.message}`, 'error');
+                    clearTimeout(timeoutId);
+                    ws.close();
                     resolve(false);
                 }
-            }, 5000); // Poll every 5 seconds
+            };
+
+            ws.onerror = () => {
+                addLog(`  ⚠️  ${fileName}: Connection error`, 'error');
+                clearTimeout(timeoutId);
+                resolve(false);
+            };
         });
+    }
+
+    // Wrapper for backward compatibility
+    async function pollExtractionUntilComplete(extractionId, fileName) {
+        return watchExtractionViaWebSocket(extractionId, fileName);
     }
 
     // Fetch masterfile status
@@ -850,7 +825,107 @@
     }
 
 
-    // Fallback: Show review button even if upload failed
+
+    /**
+     * Watch single extraction via WebSocket
+     */
+    async function watchExtractionSingleFile(extractionId) {
+        const token = localStorage.getItem('access_token');
+        if (!token) {
+            addLog('No auth token', 'error');
+            return;
+        }
+
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${protocol}//${window.location.host}/api/ws/extractions/${extractionId}?token=${token}`;
+        
+        const ws = new WebSocket(wsUrl);
+        let timeoutId = null;
+
+        const setCompletionTimeout = () => {
+            if (timeoutId) clearTimeout(timeoutId);
+            timeoutId = setTimeout(() => {
+                ws.close();
+            }, 600000);
+        };
+
+        ws.onopen = () => {
+            addLog('Connected to extraction monitor', 'info');
+            setCompletionTimeout();
+        };
+
+        ws.onmessage = (event) => {
+            const message = JSON.parse(event.data);
+
+            if (message.type === 'progress') {
+                const { page, total, percent } = message;
+                const progressBar = document.querySelector('.progress-bar');
+                const progressText = document.getElementById('progressText');
+                
+                if (total > 0) {
+                    const pct = Math.round((page / total) * 100);
+                    if (progressBar) progressBar.style.width = pct + '%';
+                    if (progressText) progressText.textContent = pct + '%';
+                    addLog(`Extracted: ${page}/${total} pages`, 'info');
+                }
+                setCompletionTimeout();
+
+            } else if (message.type === 'completed') {
+                const statusBadge = document.getElementById('statusBadge');
+                if (statusBadge) {
+                    statusBadge.className = 'badge fs-6 bg-success';
+                    statusBadge.innerHTML = '<i class="bi bi-check-circle-fill me-2"></i> COMPLETED';
+                }
+
+                const progressBar = document.querySelector('.progress-bar');
+                if (progressBar) progressBar.style.width = '100%';
+                const progressText = document.getElementById('progressText');
+                if (progressText) progressText.textContent = '100%';
+
+                const successSection = document.getElementById('successSection');
+                if (successSection) successSection.classList.remove('d-none');
+
+                const nextButtonContainer = document.getElementById('nextButtonContainer');
+                if (nextButtonContainer) nextButtonContainer.classList.remove('d-none');
+
+                addLog(`Extraction completed!`, 'success');
+                clearTimeout(timeoutId);
+                ws.close();
+
+            } else if (message.type === 'error') {
+                const statusBadge = document.getElementById('statusBadge');
+                if (statusBadge) {
+                    statusBadge.className = 'badge fs-6 bg-danger';
+                    statusBadge.innerHTML = '<i class="bi bi-x-circle-fill me-2"></i> FAILED';
+                }
+
+                const errorSection = document.getElementById('errorSection');
+                const errorText = document.getElementById('errorText');
+                if (errorSection) {
+                    errorSection.classList.remove('d-none');
+                    if (errorText) errorText.textContent = message.message || 'Unknown error';
+                }
+
+                addLog(`Extraction failed: ${message.message}`, 'error');
+                clearTimeout(timeoutId);
+                ws.close();
+            }
+        };
+
+        ws.onerror = () => {
+            addLog('Connection error', 'error');
+            clearTimeout(timeoutId);
+            showFallbackReviewButton();
+        };
+    }
+
+    // Cleanup old polling function
+    function pollStatus() {
+        // WebSocket version used instead
+    }
+
+
+        // Fallback: Show review button even if upload failed
     // This allows users to review data that WAS successfully extracted
     function showFallbackReviewButton() {
         addLog(`📋 Showing Review & Edit button - check your data`, 'warning');
@@ -938,8 +1013,7 @@
                     addLog(`✓ PDF uploaded. Extraction ID: ${extractionId}`, 'success');
                     addLog(`Starting AI extraction...`, 'processing');
 
-                    pollStatus();
-                    pollInterval = setInterval(pollStatus, 2000);
+                    watchExtractionSingleFile(extractionId);
                 } else {
                     throw new Error(data.error || 'Unknown error');
                 }
@@ -960,10 +1034,9 @@
                                 if (data && data.extraction_id) {
                                     extractionId = data.extraction_id;
                                     addLog(`✓ Recovery successful! Extraction ID: ${extractionId}`, 'success');
-                                    addLog(`Polling extraction status...`, 'processing');
+                                    addLog(`Monitoring extraction...`, 'processing');
                                     
-                                    pollStatus();
-                                    pollInterval = setInterval(pollStatus, 2000);
+                                    watchExtractionSingleFile(extractionId);
                                 } else {
                                     throw new Error('Extraction not found in recovery');
                                 }
